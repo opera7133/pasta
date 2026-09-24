@@ -124,7 +124,7 @@ fn play_at_req(seq: u64, uri: &str, line: u32) -> Value {
 /// (`:会話1:挨拶_1`) and a success ack is sent, correlated to the request seq.
 #[test]
 fn resolvable_position_calls_sink_once_and_acks() {
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let mut h = Harness::new();
     let adapter: SharedAdapter = Arc::new(Mutex::new(DapAdapter::new()));
     let breakpoints = BreakpointSet::new();
@@ -137,7 +137,7 @@ fn resolvable_position_calls_sink_once_and_acks() {
         &adapter,
         &breakpoints,
         &cmd_tx,
-        &play_at_req(50, "file:///C:/work/dic/talk.pasta", 25),
+        &play_at_req(50, TEST_URI, 25),
         &wiring,
         Some(&sink),
     );
@@ -171,7 +171,7 @@ fn resolvable_position_calls_sink_once_and_acks() {
 /// local span) resolves to the plain scene id `会話1`.
 #[test]
 fn resolvable_global_position_kicks_plain_scene() {
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let mut h = Harness::new();
     let adapter: SharedAdapter = Arc::new(Mutex::new(DapAdapter::new()));
     let breakpoints = BreakpointSet::new();
@@ -184,7 +184,7 @@ fn resolvable_global_position_kicks_plain_scene() {
         &adapter,
         &breakpoints,
         &cmd_tx,
-        &play_at_req(51, "file:///C:/work/dic/talk.pasta", 15),
+        &play_at_req(51, TEST_URI, 15),
         &wiring,
         Some(&sink),
     );
@@ -205,7 +205,7 @@ fn resolvable_global_position_kicks_plain_scene() {
 /// `message` is returned.
 #[test]
 fn not_found_position_does_not_call_sink_and_returns_error() {
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let mut h = Harness::new();
     let adapter: SharedAdapter = Arc::new(Mutex::new(DapAdapter::new()));
     let breakpoints = BreakpointSet::new();
@@ -218,7 +218,7 @@ fn not_found_position_does_not_call_sink_and_returns_error() {
         &adapter,
         &breakpoints,
         &cmd_tx,
-        &play_at_req(52, "file:///C:/work/dic/talk.pasta", 100), // past all scenes
+        &play_at_req(52, TEST_URI, 100), // past all scenes
         &wiring,
         Some(&sink),
     );
@@ -251,7 +251,7 @@ fn not_found_position_does_not_call_sink_and_returns_error() {
 /// error response and never calls the sink.
 #[test]
 fn invalid_request_returns_error_and_does_not_kick() {
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let mut h = Harness::new();
     let adapter: SharedAdapter = Arc::new(Mutex::new(DapAdapter::new()));
     let breakpoints = BreakpointSet::new();
@@ -264,7 +264,7 @@ fn invalid_request_returns_error_and_does_not_kick() {
         "seq": 53,
         "type": "request",
         "command": "pasta/playSceneAt",
-        "arguments": { "uri": "file:///C:/work/dic/talk.pasta" },
+        "arguments": { "uri": TEST_URI },
     });
     let ok = handle_inbound(
         &h.transport,
@@ -303,7 +303,7 @@ fn no_loaded_map_returns_error_and_does_not_kick() {
         &adapter,
         &breakpoints,
         &cmd_tx,
-        &play_at_req(54, "file:///C:/work/dic/talk.pasta", 25),
+        &play_at_req(54, TEST_URI, 25),
         &SourceMapWiring::disabled(), // no map
         Some(&sink),
     );
@@ -324,7 +324,7 @@ fn no_loaded_map_returns_error_and_does_not_kick() {
 /// no response frame is produced.
 #[test]
 fn no_sink_keeps_play_scene_at_path_inert() {
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let mut h = Harness::new();
     let adapter: SharedAdapter = Arc::new(Mutex::new(DapAdapter::new()));
     let breakpoints = BreakpointSet::new();
@@ -336,7 +336,7 @@ fn no_sink_keeps_play_scene_at_path_inert() {
         &adapter,
         &breakpoints,
         &cmd_tx,
-        &play_at_req(55, "file:///C:/work/dic/talk.pasta", 25),
+        &play_at_req(55, TEST_URI, 25),
         &wiring,
         None, // R2.6: sink not injected → path non-activated
     );
@@ -345,3 +345,6 @@ fn no_sink_keeps_play_scene_at_path_inert() {
     assert!(h.recv_none(), "no sink → no response frame (R2.6 inert)");
     assert!(cmd_rx.try_recv().is_err(), "no sink → no routed command");
 }
+
+const TEST_FILE: &str = if cfg!(windows) { "C:/work/dic/talk.pasta" } else { "/work/dic/talk.pasta" };
+const TEST_URI: &str = if cfg!(windows) { "file:///C:/work/dic/talk.pasta" } else { "file:///work/dic/talk.pasta" };

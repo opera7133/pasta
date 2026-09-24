@@ -23,17 +23,19 @@ pest.workspace = true
 pest_derive.workspace = true
 # mailbox=recv_async／reply・done=recv_timeout（本番アクター経路で使用）
 flume.workspace = true
-# 本番アクタースレッドの block_on メッセージループ。task 5.1 で FFI 入口が本スレッドへ
-# 切り替わったため、optional/actor-poc から通常依存へ昇格（R4.4: アクタースレッド所有を
-# アダプタ層に閉じ込める）。リリースは default 無効の actor_poc 由来コードを含まないが
-# wintf 自体は出荷経路がリンクする。
-wintf-winmsg-executor.workspace = true
 # static MAILBOX の lock-free 再設定可能スロット（RN6: respawn モデル）。reload で
 # アクタースレッド＋チャネルを teardown→再 spawn するため、送信端 Sender を Mutex なしで
 # 差し替え可能にする ArcSwapOption を用いる（送信パスは load/store のみ・lock-free）。
 arc-swap.workspace = true
 
+[target.'cfg(not(windows))'.dependencies]
+pollster = "0.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
+wintf-winmsg-executor.workspace = true
 # teardown のリーク検査（GetProcessHandleCount/GetGuiResources）に Win32_System_Threading を
 # 追加する。ベースの windows-sys（Foundation/Memory/Globalization）は workspace から継承。
 windows-sys = { workspace = true, features = ["Win32_System_Threading"] }

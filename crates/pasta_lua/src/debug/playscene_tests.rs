@@ -43,11 +43,11 @@ fn map_with_index(file: &str) -> SourceMap {
 #[test]
 fn global_confirmed_kicks_with_plain_scene_id() {
     // global 本体行（local 範囲外）→ scene == "会話1"（parent None）。
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let map = map_with_index(file);
     let (sink, captured) = mock_sink();
 
-    let outcome = resolve_and_kick(&map, &sink, "file:///C:/work/dic/talk.pasta", 15);
+    let outcome = resolve_and_kick(&map, &sink, TEST_URI, 15);
 
     assert_eq!(outcome, ResolveOutcome::Resolved("会話1".to_string()));
     assert_eq!(captured.lock().unwrap().as_slice(), &["会話1".to_string()]);
@@ -56,11 +56,11 @@ fn global_confirmed_kicks_with_plain_scene_id() {
 #[test]
 fn local_confirmed_kicks_with_composite_scene() {
     // local 範囲内（最内 local 優先）→ scene == ":会話1:挨拶_1"（parent Some）。
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let map = map_with_index(file);
     let (sink, captured) = mock_sink();
 
-    let outcome = resolve_and_kick(&map, &sink, "file:///C:/work/dic/talk.pasta", 25);
+    let outcome = resolve_and_kick(&map, &sink, TEST_URI, 25);
 
     assert_eq!(
         outcome,
@@ -75,11 +75,11 @@ fn local_confirmed_kicks_with_composite_scene() {
 #[test]
 fn not_found_does_not_kick() {
     // 最終シーン終端より後ろ（下方に有効シーンなし）→ 未検出・sink 不呼出。
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let map = map_with_index(file);
     let (sink, captured) = mock_sink();
 
-    let outcome = resolve_and_kick(&map, &sink, "file:///C:/work/dic/talk.pasta", 100);
+    let outcome = resolve_and_kick(&map, &sink, TEST_URI, 100);
 
     assert_eq!(outcome, ResolveOutcome::NotFound);
     assert!(
@@ -92,16 +92,16 @@ fn not_found_does_not_kick() {
 fn differently_formatted_equivalent_uris_resolve_to_same_scene() {
     // 同一ファイルを指す別形式 uri（パーセントエンコード・区切り違い）が、
     // std::path::absolute 正規化を経て同一シーンへ解決する（正規化の固定）。
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let map = map_with_index(file);
 
     // 形式 A: スラッシュ・素のドライブパス（uri スキームなし）。
     let (sink_a, cap_a) = mock_sink();
-    let out_a = resolve_and_kick(&map, &sink_a, "C:/work/dic/talk.pasta", 25);
+    let out_a = resolve_and_kick(&map, &sink_a, TEST_FILE, 25);
 
     // 形式 B: file:// + パーセントエンコード（`%20` ではなくここでは大小・スキーム差）。
     let (sink_b, cap_b) = mock_sink();
-    let out_b = resolve_and_kick(&map, &sink_b, "file:///C:/work/dic/talk.pasta", 25);
+    let out_b = resolve_and_kick(&map, &sink_b, TEST_URI, 25);
 
     assert_eq!(out_a, out_b, "別形式 uri は同一シーンへ解決する");
     assert_eq!(
@@ -147,15 +147,16 @@ fn uri_to_pasta_path_strips_scheme_and_decodes() {
 /// 既存 `differently_formatted_equivalent_uris_resolve_to_same_scene`（3.1）を
 /// 広げ、(a) 区切り混在 `\`/`/`、(b) ドライブ文字の大小、(c) `file://` の有無、
 /// (d) 余分な `.`/`..` セグメント、(e) `%3A`（`:`）パーセントエンコードまで網羅する。
+#[cfg(windows)]
 #[test]
 fn windows_and_uri_encoded_forms_all_resolve_to_same_local_scene() {
-    let file = "C:/work/dic/talk.pasta";
+    let file = TEST_FILE;
     let map = map_with_index(file);
 
     // すべて C:\work\dic\talk.pasta の local 範囲（行 25）を指す等価形式。
     let equivalent_forms = [
-        "file:///C:/work/dic/talk.pasta",       // 標準 file:// uri
-        "C:/work/dic/talk.pasta",               // 素のドライブパス・スラッシュ
+        TEST_URI,       // 標準 file:// uri
+        TEST_FILE,               // 素のドライブパス・スラッシュ
         r"C:\work\dic\talk.pasta",              // バックスラッシュ区切り
         r"c:\work\dic\talk.pasta",              // ドライブ文字小文字
         "C:/work/./dic/../dic/talk.pasta",      // 余分な `.`/`..`（absolute が解決）
@@ -183,19 +184,19 @@ fn windows_and_uri_encoded_forms_all_resolve_to_same_local_scene() {
 #[test]
 fn japanese_filename_percent_encoded_uri_resolves_to_same_scene() {
     // 会話.pasta（"会話" = E4 BC 9A / E8 A9 B1）。
-    let file = "C:/work/dic/会話.pasta";
+    let file = if cfg!(windows) { "C:/work/dic/会話.pasta" } else { "/work/dic/会話.pasta" };
     let map = map_with_index(file);
 
     // 素の（デコード済み）形式。
     let (sink_plain, _c1) = mock_sink();
-    let out_plain = resolve_and_kick(&map, &sink_plain, "C:/work/dic/会話.pasta", 25);
+    let out_plain = resolve_and_kick(&map, &sink_plain, if cfg!(windows) { "C:/work/dic/会話.pasta" } else { "/work/dic/会話.pasta" }, 25);
 
     // パーセントエンコード済みの file:// uri（VSCode が届ける形）。
     let (sink_enc, _c2) = mock_sink();
     let out_enc = resolve_and_kick(
         &map,
         &sink_enc,
-        "file:///C:/work/dic/%E4%BC%9A%E8%A9%B1.pasta",
+        if cfg!(windows) { "file:///C:/work/dic/%E4%BC%9A%E8%A9%B1.pasta" } else { "file:///work/dic/%E4%BC%9A%E8%A9%B1.pasta" },
         25,
     );
 
@@ -275,14 +276,14 @@ fn existing_path_normalizes_lexically_without_canonicalize_verbatim_prefix() {
 #[test]
 fn nonexistent_path_still_resolves_fs_independent() {
     // ディスク上に存在しないことが事実上保証されるパス（8.3 短縮名形も含めて字句的）。
-    let file = r"C:\definitely-nonexistent-9f3a\RUNNER~1\Temp\talk.pasta";
+    let file = if cfg!(windows) { r"C:\definitely-nonexistent-9f3a\RUNNER~1\Temp\talk.pasta" } else { "/definitely-nonexistent-9f3a/RUNNER~1/Temp/talk.pasta" };
     let map = map_with_index(file);
 
     let (sink, _captured) = mock_sink();
     let outcome = resolve_and_kick(
         &map,
         &sink,
-        "file:///C:/definitely-nonexistent-9f3a/RUNNER~1/Temp/talk.pasta",
+        if cfg!(windows) { "file:///C:/definitely-nonexistent-9f3a/RUNNER~1/Temp/talk.pasta" } else { "file:///definitely-nonexistent-9f3a/RUNNER~1/Temp/talk.pasta" },
         25,
     );
 
@@ -293,3 +294,6 @@ fn nonexistent_path_still_resolves_fs_independent() {
          FS 非依存（std::path::absolute）。fs::canonicalize は実在しないパスで Err になる。"
     );
 }
+
+const TEST_FILE: &str = if cfg!(windows) { "C:/work/dic/talk.pasta" } else { "/work/dic/talk.pasta" };
+const TEST_URI: &str = if cfg!(windows) { "file:///C:/work/dic/talk.pasta" } else { "file:///work/dic/talk.pasta" };

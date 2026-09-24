@@ -24,3 +24,8 @@ pub use shiori::{PastaShiori, Shiori};
 // （rlib 経由の統合テストでは no_mangle シンボルがリンク到達するために Rust から参照が必要）。
 #[cfg(windows)]
 pub use windows::{load, loadu, request, unload};
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::{load, loadu, request, unload};

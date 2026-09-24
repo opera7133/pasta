@@ -146,7 +146,8 @@ pub fn teardown_actor() -> TeardownReport {
     // スレッドハンドルを取り出す（ライフサイクル境界・送信パス外）。
     let actor = ACTOR_HANDLE.lock().ok().and_then(|mut g| g.take());
 
-    let report = match tx {
+    #[allow(unused_mut)]
+    let mut report = match tx {
         Some(tx) => teardown_via_sender(&tx, TEARDOWN_TIMEOUT),
         // MAILBOX 未初期化（load 前 / 既 teardown 済み）: 冪等 no-op。
         None => TeardownReport {
@@ -158,7 +159,18 @@ pub fn teardown_actor() -> TeardownReport {
 
     // ack を受けたか否かに関わらずスレッドは detach する（join しない・R7.4）。
     if let Some(actor) = actor {
+        #[cfg(windows)]
         actor.detach();
+        #[cfg(not(windows))]
+        if report.anomaly.is_none() {
+            // A macOS host may dlclose immediately after unload. The final ack
+            // precedes thread return, so wait for TLS destructors as well.
+            if actor.join().is_err() {
+                report.anomaly = Some("actor thread panicked during teardown".into());
+            }
+        } else {
+            actor.detach();
+        }
     }
 
     report

@@ -38,6 +38,10 @@ use std::path::PathBuf;
 use std::thread::{self, JoinHandle, ThreadId};
 
 use flume::Receiver;
+#[cfg(windows)]
+use wintf_winmsg_executor::block_on;
+#[cfg(not(windows))]
+use pollster::block_on;
 
 use crate::actor::mailbox::{ActorMsg, Reply};
 use crate::shiori::{PastaShiori, Shiori};
@@ -143,7 +147,7 @@ pub fn spawn_actor_thread(
         .spawn(move || {
             // このスレッドの Windows メッセージループ上で future を完走させる。
             // future は `!Send` な PastaShiori を所有し、recv_async().await のみで待機。
-            wintf_winmsg_executor::block_on(async move {
+            block_on(async move {
                 // (1) VM をこのスレッドで構築・pin（!Send ゆえ越境不可）。
                 let mut shiori = PastaShiori::default();
                 let loaded = shiori
