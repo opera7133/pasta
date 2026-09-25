@@ -308,14 +308,16 @@ fn actor_work_survives_timeout_and_recovers_on_next_tick() {
     let (tx, rx) = mailbox();
     let mut driver = SimDriver::new();
     let short_timeout = Duration::from_millis(20);
-    let actor_delay = Duration::from_millis(120); // 閾値 << 遅延（決定論的に timeout）。
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
 
     // アクター役: 2 件の GET を順に drain する単一直列ループ（FIFO・単一 consumer）。
     let actor = thread::spawn(move || {
-        // Round1: 閾値より遅延してから reply（SHIORI は既に打ち切り済み）。
+        // Round1: SHIORI の timeout 後にのみ reply する。
         //         work は失われず最後まで完走する（co_scene 保存の構造的模擬）。
         if let Ok(ActorMsg::Get { req: _, reply }) = rx.recv() {
-            thread::sleep(actor_delay);
+            started_tx.send(()).expect("test must observe in-flight work");
+            release_rx.recv().expect("test must release in-flight work");
             let _ = reply.send(Reply::Value("late-but-completed".to_string()));
         }
         // Round2: 通常速度で reply（次 tick による回復に相当）。
@@ -328,6 +330,10 @@ fn actor_work_survives_timeout_and_recovers_on_next_tick() {
     let r1_tick = driver.tick(true);
     assert!(r1_tick.is_playable());
     let round1 = marshal_get_with_timeout(&tx, MailboxRequest::new(1, "R1"), short_timeout);
+    started_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("actor must receive the first GET");
+    release_tx.send(()).expect("actor must continue after timeout");
     assert_eq!(
         round1.as_bytes(),
         default_204().as_bytes(),
