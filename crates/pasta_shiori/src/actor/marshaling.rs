@@ -365,9 +365,9 @@ mod tests {
 
     /// timeout→204＋coroutine 保存（R5.7）: 閾値超過時に 204 を返しつつ、アクター（Lua）の
     /// in-flight work は **打ち切らない**ことを決定論的に示す。実 VM の wall-clock に
-    /// 依存しないよう、閾値より明確に遅いアクター役を注入する。
+    /// 依存しないよう、アクター役の応答を明示的に待たせる。
     ///
-    /// - Round1（slow GET）: アクター役が閾値より長く遅延してから reply するため、
+    /// - Round1（slow GET）: アクター役の reply を解放する前に待機が切れるため、
     ///   marshal_get は timeout で 204 を返す（SHIORI 待機の打ち切り）。
     /// - 重要: timeout は SHIORI 側の待機を切るだけで、アクター役（Lua 実行相当）は
     ///   その後も処理を続行し reply を **完了** する（co_scene 保存の構造的根拠）。
@@ -377,14 +377,14 @@ mod tests {
     fn marshal_get_timeout_yields_204_but_actor_work_survives_and_recovers() {
         let (tx, rx) = mailbox();
         let short_timeout = Duration::from_millis(20);
-        let actor_delay = Duration::from_millis(120); // 閾値 << 遅延（決定論的に timeout）。
+        let (release_tx, release_rx) = flume::bounded::<()>(1);
 
         // アクター役: 2 件の GET を順に drain する単一直列ループ（FIFO・単一 consumer）。
         let actor = thread::spawn(move || {
-            // Round1: 閾値より遅延してから reply（SHIORI は既に打ち切っている）。
+            // Round1: テスト側が解放するまで reply を送らない。
             //         work は失われず最後まで完走する（co_scene 保存の構造的模擬）。
             if let Ok(ActorMsg::Get { req: _, reply }) = rx.recv() {
-                thread::sleep(actor_delay);
+                release_rx.recv().expect("release signal must arrive");
                 let _ = reply.send(Reply::Value("late-but-completed".to_string()));
             }
             // Round2: 通常速度で reply（次 tick での回復に相当）。
@@ -401,6 +401,7 @@ mod tests {
             default_204().as_bytes(),
             "GET exceeding the threshold must return 204 (SHIORI wait aborted)"
         );
+        release_tx.send(()).expect("actor must still be waiting");
 
         // Round2: 通常速度で待つ → 値が返る（後続 tick による回復）。アクター役の Round1
         // work が打ち切られていれば Round2 の FIFO が崩れ、この assert が落ちる。
