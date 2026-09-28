@@ -1583,7 +1583,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_check"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "lexopt",
  "md5",
@@ -1593,7 +1593,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_core"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "fast_radix_trie",
  "rand 0.10.3",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_dsl"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "pest",
  "pest_derive",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_lsp"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "pasta_dsl",
  "serde",
@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_lua"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "budouy",
  "ctor",
@@ -1654,7 +1654,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_sample_ghost"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "ctor",
  "image",
@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_shiori"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "arc-swap",
  "ctor",
