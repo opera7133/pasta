@@ -26,7 +26,7 @@
 
 ## Boundary Context
 
-- **In scope**: 全レビュー領域（Rust クレート・Lua ランタイム資産・VSCode 拡張・`book/tools` を含む全ソース資産）× 全 7 次元のマトリクス改善を 1 実装指示で完走するループ。領域の自己発見（ギャップ分析）、サブエージェント委譲、サイクル毎コミット、破壊検知、巻き戻し、最終レポート。既存の品質検証インフラ（本リポジトリでは Rust=`cargo test`/`cargo clippy`/`cargo-audit`/`cargo-deny`/`insta`、Lua=`luacheck`/`lua_test`、TypeScript/JS=型検査・lint・`npm` テスト、横断=`TEST_COVERAGE.md`・`book` drift-check）の活用と必要に応じた追加
+- **In scope**: 全レビュー領域（Rust クレート・Lua ランタイム資産・VSCode 拡張・`book/tools` を含む全ソース資産）× 全 7 次元のマトリクス改善を 1 実装指示で完走するループ。領域の自己発見（ギャップ分析）、サブエージェント委譲、サイクル毎コミット、破壊検知、巻き戻し、最終レポート。既存の品質検証インフラ（本リポジトリでは Rust=`cargo test`/`cargo clippy`/`cargo-audit`/`cargo-deny`/`insta`、Lua=`luacheck`/`lua_test`、TypeScript/JS=型検査・lint・`npm` テスト、横断=`TEST_COVERAGE.md`・`book` link-check・tutorial-check・スキル生成同期検査 `gen-skill-refs --check`）の活用と必要に応じた追加
 - **Out of scope**: 新機能の追加・外部仕様の変更（挙動保存が前提）。完了済み `audit-pasta-*` spec の改変・再オープン。性能チューニングを主目的とする作業（簡素化の副次効果は可）。CI 設定そのものの再設計（既存ワークフローとの整合確認は可）。Kiro ワークフロー自体（spec/skill 群）の改修。pasta DSL 文法・Lua API の仕様変更。リリース・配布フロー（`release-workflow` の領分）。マニュアル `book/` の内容拡充（ドキュメント整合次元での同期確認は In）
 - **Adjacent expectations**: 既存スキル `karpathy-guidelines`（簡素化基準）・`kiro-review`（敵対的レビュー）・`kiro-debug`（根本原因デバッグ）・`kiro-verify-completion`（完了前検証）が利用可能であることを前提とする。`workflow.md` の DoD・回帰責任・危険 Git 操作禁止・MVP 禁止ルールに整合する。本リポジトリでは `cargo` 実行前に環境変数 `NoDefaultCurrentDirectoryInExePath` の解除が必要（既知のビルド環境制約）
 
@@ -60,7 +60,7 @@
 6. When lint 徹底次元のセルを実行する, the Review Improvement Loop shall 対象プロジェクト標準の lint（本リポジトリでは `cargo clippy`）を警告ゼロ相当の水準で通過させ、慣用句からの逸脱を是正する
 7. When デッドコード/未使用除去次元のセルを実行する, the Review Improvement Loop shall 未使用の公開エクスポート・関数・依存を検出して除去する
 8. When パニック経路削減次元のセルを実行する, the Review Improvement Loop shall 回復不能停止に至る経路（`unwrap`/`expect`/インデックスパニック等）を明示的なエラー処理へ置換し、FFI/SHIORI 等の外部境界を特に重視する
-9. When ドキュメント/依存整合次元のセルを実行する, the Review Improvement Loop shall テストマッピング台帳・README・仕様ドキュメントの同期確認、およびサプライチェーン監査（本リポジトリでは `cargo-audit`/`cargo-deny`）を実施する
+9. When ドキュメント/依存整合次元のセルを実行する, the Review Improvement Loop shall テストマッピング台帳・README・仕様ドキュメントの同期確認、内部設計章（`book/src/internals/`）と現行実装の照合（存在しないソースの参照・実装と食い違う記述・実装にあって章に無い主要機構の有無。内部設計章ごとに照合結果を記録し、乖離を改善対象として扱う）、およびサプライチェーン監査（本リポジトリでは `cargo-audit`/`cargo-deny`）を実施する
 10. Where レビュー領域が特定の資産種別に属する, the Review Improvement Loop shall 各次元を当該資産種別に適合したツール・手法で実現し（本リポジトリでは Rust=`cargo clippy`/`cargo-audit`/`cargo-deny`、Lua=`luacheck`/`lua_test`、TypeScript/JS=型検査・lint・`npm` テスト等）、当該資産種別に適用不能な次元は「該当なし」として記録する
 
 ### Requirement 3: 挙動保存ポリシー

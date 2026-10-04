@@ -33,21 +33,55 @@ requirements → design → tasks → implementation → implementation-complete
 3. **Doc Gate**: 仕様差分を反映
 4. **Steering Gate**: 既存ステアリングと整合
 5. **Soul Gate**: [SOUL.md](../../SOUL.md) との整合性確認（タスク生成時に自動追加）
-6. **Manual Sync Gate（条件付き）**: マニュアル（`book/`）と権威仕様（`doc/spec/`）の整合確認
+6. **Manual Sync Gate（条件付き）**: マニュアル（`book/`）とスキル生成物の同期確認
+7. **Internals Sync Gate（条件付き）**: 内部設計章（`book/src/internals/`）と実装の追従確認
 
 #### 6. Manual Sync Gate（条件付き）
 
 **ルール本体はこのゲートに置く**（権威）。`kiro-complete` はこのゲートを発火・オーケストレーションするのみで、判定ルールを複製しない。
 
-- **発火条件**: 当該 spec の変更が `doc/spec/` または `book/` に**触れる場合のみ**発火する。
-- **スキップ**: 当該 spec の変更が `doc/spec/` にも `book/` にも触れない場合は、このゲートを**スキップ**する（無関係な spec の完了承認を重くしない）。Gate 1〜5 のみで完了可とする。
-- **判定**: 発火時は `node book/tools/drift-check.mjs` を実行し、以下が無いことを確認する。
-  - **ドリフト**: `book/manual-sources.toml` の記録ハッシュ（版マーカー）と `doc/spec/` の現値ハッシュの不一致（＝参照元が変わったのにマニュアル章が追従していない）。
-  - **未マップ / リンク切れ**: `doc/spec/` に存在するがマッピングに無い章・節、マニュアル→`doc/spec/` および外部参照リンクの切れ。
-- **中断**: `drift-check.mjs` が**非ゼロ終了**した場合は、**未解決ドリフトとして完了を中断**する。
-- **ドリフト解消フロー**: 該当マニュアル章を `doc/spec/` の現状に追従更新したうえで、`book/manual-sources.toml` の版マーカーを現値に更新する（＝レビュー済みであることの明示）。これでゲートを再実行し通過させる。
+利用者向け情報（文法・公開 Lua API・`pasta.toml`）の権威はマニュアル（`book/src/`）であり、スキル `references/` の生成ファイルはマニュアル章から生成される。本ゲートは両者が同期していることを確認する。
+
+- **発火条件**: 当該 spec の変更が `book/`・`.claude/skills/pasta-ghost-authoring/`・`.claude/skills/pasta-lua-coding/` のいずれかに**触れる場合のみ**発火する。
+- **スキップ**: 当該 spec の変更が上記のいずれにも触れない場合は、このゲートを**スキップ**する（無関係な spec の完了承認を重くしない）。Gate 1〜5 のみで完了可とする。
+- **判定**: 発火時は次の 2 コマンドを実行し、**ともに exit 0** であることを確認する。
+  ```powershell
+  node book/tools/gen-skill-refs.mjs --check   # 鮮度チェック: スキル生成ファイルがマニュアル章からの生成結果と一致
+  node book/tools/link-check.mjs               # リンク検証: マニュアル内リンク切れ・スキルの自己完結性
+  ```
+- **中断**: いずれかが**非ゼロ終了**した場合は、**完了を中断**する。
+- **解消フロー**: マニュアル章（`book/src/`）を正として修正する → `node book/tools/gen-skill-refs.mjs` で生成ファイルを再生成する → コミットする → ゲートを再実行して通過させる。生成ファイルを手で直して合わせてはならない。
 
 > 既存 Gate 1〜5 の意味・順序は変更しない。本ゲートは条件付きの**追加**である。
+
+#### 7. Internals Sync Gate（条件付き）
+
+**ルール本体はこのゲートに置く**（権威）。`kiro-complete` はこのゲートを発火・オーケストレーションするのみで、判定ルールを複製しない。
+
+内部設計章（`book/src/internals/`）は実装の内部構造を解説する章であり、対象のソースが変わるたびに追従が要る。本ゲートは、当該 spec の変更が内部設計章の対象領域に触れたとき、該当章が実装に追従しているかを確認する。
+
+- **対象領域のデータ**: [`book/src/internals/index.md`](../../book/src/internals/index.md) の「章と対象ソース範囲」表を正とする。表のパスはマニュアル CI のパス実在検査（`internals-path`）の対象であり、このゲートには表を複製しない。
+- **変更ファイル一覧**: 次の 2 コマンドの出力の和とする（完了コミットより前に判定するため、作業ツリーとの差分と未追跡ファイルを含める）。`{default-branch}` は `kiro-complete` が解決したデフォルトブランチ。
+  ```powershell
+  git diff --name-only --no-renames $(git merge-base HEAD {default-branch})   # マージベースから作業ツリーまでの差分（--no-renames で移動元の旧パスも残す）
+  git ls-files --others --exclude-standard                       # 未追跡ファイル
+  ```
+- **照合規則**: 変更ファイル一覧の各パスを表の各セルの値と照合する。値が `/` で終わるセルはパスの**接頭辞一致**、それ以外は**完全一致**とする。1 つのファイルが複数の章に一致した場合は、**一致したすべての章**を確認対象とする。
+- **発火条件**: 変更ファイル一覧のいずれかが表のパスに一致する場合のみ発火する。
+- **スキップ**: 一致が 1 件も無い場合は、このゲートを**スキップ**し、完了チェックリストに「(対象領域外によりスキップ)」と記録する。
+- **判定**: 発火時は、一致した章ごとに次の (a)(b) のいずれかを満たすことを確認し、その結果（更新済み、または更新不要の理由）を章ごとに完了チェックリストへ記録する。
+  - (a) 当該 spec がその章を更新した（変更ファイル一覧に `book/src/internals/<章のファイル>` が含まれる）。
+  - (b) 更新不要の理由（例: テストのみの変更、章の記述粒度に影響しない内部リファクタ）を完了チェックリストに記録した。
+
+  加えて、章の更新の有無にかかわらず次のコマンドを実行し、**exit 0** であることを確認する（ソース側の移動・リネームによる章のパス切れはマニュアル CI が起動しないため、ここで検出する）。
+  ```powershell
+  node book/tools/link-check.mjs   # internals-path（内部設計章のパス実在検査）を含むリンク検証
+  ```
+- **中断**: (a)(b) のどちらも満たさない章がある場合、または `link-check.mjs` が**非ゼロ終了**した場合は、**完了を中断**し開発者に報告する。
+- **解消フロー**: 該当章を現行の実装に合わせて更新する（または更新不要の理由を記録する）／章のパスと表を現行のソース配置に合わせる → コミットする → ゲートを再実行して通過させる。
+- **Manual Sync Gate との関係**: 章を更新した場合は `book/` に触れるため、Gate 6（Manual Sync Gate）が既存の発火条件で発火し、鮮度チェックとリンク検証の通過も完了条件になる。
+
+> 既存 Gate 1〜6 の意味・順序は変更しない。本ゲートは条件付きの**追加**である。
 
 ---
 
@@ -61,7 +95,7 @@ git add -A; git commit -m "<type>(<scope>): <summary>"
 
 ### 2. スキルドキュメント更新検討
 
-実装内容が以下に該当する場合、対応するスキルの SKILL.md および references/ を読み込み、実装との乖離がないか検証・更新する。
+実装内容が以下に該当する場合、対応するスキルの SKILL.md および references/ を読み込み、実装との乖離がないか検証・更新する。references/ の各ファイルが「生成」（マニュアルから生成）か「手書き」かは、各 SKILL.md の区分表に従う。
 
 | 変更領域 | 対象スキル | 確認ポイント |
 |----------|-----------|-------------|
@@ -72,10 +106,12 @@ git add -A; git commit -m "<type>(<scope>): <summary>"
 **手順**:
 1. SKILL.md を読み込み、実装で変更・追加した機能が反映されているか確認
 2. references/ 配下の該当ファイルを読み込み、記述の正確性を検証
-3. 乖離があれば更新し、SKILL.md の metadata.version をバンプ
-4. 更新があった場合はコミット:
+3. 乖離があれば更新する:
+   - **生成ファイル**（区分表で「生成」）: 生成ファイルは直接編集しない。生成元のマニュアル章（`book/src/`）を直し、`node book/tools/gen-skill-refs.mjs` で再生成する
+   - **SKILL.md と手書きファイル**: 従来どおり直接更新する
+4. 更新があった場合は SKILL.md の metadata.version をバンプし、コミット:
    ```powershell
-   git add .agents/skills/; git commit -m "docs(skill): <スキル名> を実装に同期"
+   git add book/src/ .claude/skills/; git commit -m "docs(skill): <スキル名> を実装に同期"
    ```
 
 **スキップ条件**: テストのみの変更、ドキュメントのみの変更、スキル対象外クレート（pasta_lsp等）のみの変更は対象外。
@@ -103,6 +139,8 @@ gh pr create --base {default-branch} --head $branch --title "<subject>" --body "
 #    --subject / --body は下記「squash コミットメッセージの生成方針」に従って供給する
 gh pr merge --squash --delete-branch --subject "<subject>" --body "<body>"
 ```
+
+**CI を待たない**: squash マージは PR の CI 完了を待たずに行う。マージ前の関門は DoD の Test Gate（ローカルの `cargo test --all` と `cargo clippy --all-targets --workspace -- -D warnings`）であり、CI の緑を人や AI が見張る運用はしない。CI にしか見えない失敗（x86 ターゲット・ランナー固有のパス・cargo-deny・クリーンチェックアウト）で main が赤くなった場合は、次の作業より先に追いかけの修正で直す。取り消せない crates.io 公開の前にだけ「main の CI 全緑」を関門として課す（`release-workflow` Task 1.1）。
 
 **ブランチ削除のタイミング**: リモートの feature ブランチは `gh pr merge --delete-branch` が **PR マージ成功後に** API で削除する。**マージ成功前にブランチを削除しない**（復旧可能性を確保するため）。ローカルブランチおよびワークツリーは、カレントワークツリーで実行中のため構造的に削除できない。これらの後始末はハーネスのワークツリー teardown に委ねる（`--delete-branch` のローカル削除試行がブロックされて警告を出しても、これは非致命でありマージ成功を覆さない）。
 
@@ -158,13 +196,12 @@ git add -A; git commit -m "chore(spec): <spec-name>をcompletedへ移動"
 実装完了後、以下のドキュメントとの整合性を確認・更新：
 
 1. [ ] SOUL.md - コアバリュー・設計原則との整合性確認
-2. [ ] doc/spec/ - 言語仕様の更新（該当する場合）
-3. [ ] GRAMMAR.md - 文法リファレンスの同期（該当する場合）
-4. [ ] TEST_COVERAGE.md - 新規テストのマッピング追加
-5. [ ] クレートREADME - API変更の反映（該当する場合）
-6. [ ] steering/* - 該当領域のステアリング更新
-7. [ ] .agents/skills/pasta-ghost-authoring/ - DSL文法変更時にスキル同期（該当する場合）
-8. [ ] .agents/skills/pasta-lua-coding/ - Lua API変更時にスキル同期（該当する場合）
+2. [ ] book/src/ - 利用者向け仕様（文法・公開 Lua API・pasta.toml）の該当章を更新し、`node book/tools/gen-skill-refs.mjs` でスキル生成ファイルを再生成（該当する場合）
+3. [ ] TEST_COVERAGE.md - 新規テストのマッピング追加
+4. [ ] クレートREADME - API変更の反映（該当する場合）
+5. [ ] steering/* - 該当領域のステアリング更新
+6. [ ] .claude/skills/pasta-ghost-authoring/ - DSL文法変更時に SKILL.md・手書きファイルを同期（該当する場合）
+7. [ ] .claude/skills/pasta-lua-coding/ - Lua API変更時に SKILL.md・手書きファイルを同期（該当する場合）
 
 特に、以下の場合は**SOUL.md更新が必須**：
 - コアバリュー（日本語フレンドリー、UNICODE識別子、yield型、宣言的フロー）に影響
@@ -251,14 +288,14 @@ git add -A; git commit -m "chore(spec): <spec-name>をcompletedへ移動"
 
 | 変更種別             | 更新対象ドキュメント                                    |
 | -------------------- | ------------------------------------------------------- |
-| コアバリュー影響     | **SOUL.md（最優先）**、doc/spec/                        |
-| 公開API変更          | クレートREADME、doc/spec/                               |
-| DSL文法変更          | GRAMMAR.md、steering/grammar.md、SOUL.md（設計原則）    |
+| コアバリュー影響     | **SOUL.md（最優先）**、book/src/ の該当章＋スキル再生成 |
+| 公開API変更          | クレートREADME、book/src/ の該当章＋スキル再生成        |
+| DSL文法変更          | book/src/grammar/ の該当章＋スキル再生成、steering/grammar.md、SOUL.md（設計原則） |
 | ディレクトリ構造変更 | steering/structure.md、クレートREADME                   |
 | 依存関係変更         | steering/tech.md、クレートREADME                        |
 | 開発フロー変更       | steering/workflow.md、CLAUDE.md                         |
-| DSL文法変更          | .agents/skills/pasta-ghost-authoring/ (SKILL.md + references/) |
-| Lua API変更          | .agents/skills/pasta-lua-coding/ (SKILL.md + references/)     |
+| DSL文法変更          | .claude/skills/pasta-ghost-authoring/ (SKILL.md＋手書きファイル。生成ファイルは再生成) |
+| Lua API変更          | book/src/lua/ の該当章＋スキル再生成、.claude/skills/pasta-lua-coding/ (SKILL.md＋手書きファイル) |
 | 新クレート追加       | README.md（ドキュメントマップ）、クレートREADME新規作成 |
 | テストカバレッジ変更 | TEST_COVERAGE.md                                        |
 
@@ -269,16 +306,15 @@ git add -A; git commit -m "chore(spec): <spec-name>をcompletedへ移動"
 | **SOUL.md**      | **コアバリュー・設計原則変更（最優先）** |
 | README.md        | プロジェクト概要変更、新クレート追加     |
 | CLAUDE.md        | AI開発支援プロジェクト指示変更           |
-| GRAMMAR.md       | DSL文法変更                              |
-| doc/spec/        | 言語仕様変更（権威的）                   |
+| book/src/        | 利用者向け仕様（文法・公開 Lua API・pasta.toml）の変更（権威） |
 | TEST_COVERAGE.md | テスト追加・削除・機能変更               |
 | クレートREADME   | クレートAPI/構造変更                     |
 | steering/*       | 対応領域の変更                           |
 
 ### 保守ルール
 
-1. **コアバリュー変更時**: まずSOUL.mdを更新、その後doc/spec/・GRAMMAR.mdを同期
+1. **コアバリュー変更時**: まずSOUL.mdを更新、その後マニュアルの該当章（book/src/）を更新し、`node book/tools/gen-skill-refs.mjs` でスキル生成ファイルを再生成
 2. **API変更時**: 対応するクレートREADMEの「公開API」セクションを更新
-3. **仕様変更時**: まずdoc/spec/を更新、その後GRAMMAR.mdを同期
+3. **仕様変更時**: まずマニュアルの該当章（book/src/）を更新し、`node book/tools/gen-skill-refs.mjs` でスキル生成ファイルを再生成
 4. **テスト追加時**: TEST_COVERAGE.mdのマッピングを更新
 5. **PR時確認**: ドキュメント更新漏れがないかDoDチェックリストで確認

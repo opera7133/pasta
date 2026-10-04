@@ -30,6 +30,7 @@
 | 属性定義（＆）               | フィクスチャあり                               | 🔶 部分 | `transpiler2/attribute_inheritance.pasta`       |
 | 単語定義（＠）               | `actor_word_dictionary_test.rs`                | ✅ 完了 | 単語定義・参照                                  |
 | 複数キー単語定義（＠k1、k2） | `ast_test.rs`                                  | ✅ 完了 | 6テスト（2キー・3キー・半角カンマ・各スコープ） |
+| 動的単語参照（＠＄）          | `dynamic_word_ref_test.rs`（pasta_dsl）<br>`partial_parse_test.rs` | ✅ 完了 | 区別・拒否（行と列）・AST 変換・部分パースの位置補正 |
 | 変数定義（＄）               | フィクスチャあり                               | 🔶 部分 | `transpiler2/variable_scope.pasta`              |
 | Call文（＞）                 | `transpiler_scene_test.rs`                     | ✅ 完了 | 制御フロー                                      |
 | コメント行（＃）             | 暗黙的テスト                                   | 🔶 部分 | 明示的テストなし                                |
@@ -67,6 +68,7 @@
 | Call/末尾Call最適化    | `transpiler_scene_test.rs`                                                                  | ✅ 完了 | 自動判定                           |
 | CueCommandパススルー   | `cue_command_passthrough_test.rs`                                                           | ✅ 完了 | 5テスト（Lua変換スキップ検証）     |
 | 複数キー単語登録       | `transpiler.rs`（インライン）                                                               | ✅ 完了 | 7テスト（登録・Lua出力・後方互換） |
+| 動的単語参照（＠＄）   | `transpiler/dynamic_word_ref_test.rs`<br>`lua_specs/act_dynamic_ref_test.lua`<br>`runtime/syntax_test.rs`（E2E）<br>`pasta_lsp/tests/dynamic_ref_token_test.rs` | ✅ 完了 | 生成コード・スナップショット・マニュアル例の読み込み・キー解決と検索段・E2E・LSP トークン |
 | エンコーディング       | `pasta_lua_encoding_test.rs`                                                                | ✅ 完了 | 文字エンコード                     |
 | プロパティLua変換      | `property_scope_codegen_test.rs`                                                            | ✅ 完了 | 10テスト（property-dsl-extension） |
 | プロパティトークン保全 | `property_token_preservation_test.rs`                                                       | ✅ 完了 | 3テスト（property-dsl-extension）  |
@@ -200,7 +202,7 @@
 | cargo test pasta_shiori 100%パス    | 全pasta_shioriテスト          | ✅ 157テスト                    |
 | comprehensive_control_flow検証      | `transpiler_snapshot_test.rs` | ✅ 8スナップショット            |
 | スナップショットテスト整備          | insta crate                   | ✅ 実装済み                     |
-| 最適化レベルの文書化                | OPTIMIZATION.md               | ✅ 完了                         |
+| 最適化レベルの文書化                | [内部設計: トランスパイル](https://ekicyou.github.io/pasta/internals/transpiler.html#生成時最適化) | ✅ 完了                         |
 | ドキュメント整合性検証              | -                             | ✅ 本セッションで検証           |
 | TEST_COVERAGE.md作成                | -                             | ✅ 本ドキュメント               |
 | 未テスト領域の特定                  | -                             | ✅ 本ドキュメント Section 4参照 |
@@ -292,7 +294,7 @@
 
 1. ~~**優先度 High**: pasta_shiori 5テスト失敗の修正~~ ✅ 完了
 2. ~~**優先度 High**: Golden Test（スナップショットテスト）整備~~ ✅ 完了（8スナップショット）
-3. ~~**優先度 Medium**: 最適化レベルの文書化~~ ✅ 完了（OPTIMIZATION.md）
+3. ~~**優先度 Medium**: 最適化レベルの文書化~~ ✅ 完了（[内部設計: トランスパイルパイプライン](https://ekicyou.github.io/pasta/internals/transpiler.html#生成時最適化)）
 4. ~~**優先度 Medium**: シーンテーブル設計レビュー~~ ✅ 完了（SCENE_TABLE_REVIEW.md）
 
 ### Phase 1に向けて

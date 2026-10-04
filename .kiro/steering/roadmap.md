@@ -36,6 +36,41 @@ SSPのプロパティシステムへのアクセスをpastaゴーストから可
 ## Phase 2: DSL統合
 - [x] property-dsl-extension -- `＄％` スコープ修飾子によるプロパティアクセスDSL構文（＄％prop.path＝value / ＄var＝＄％prop.path）。既存Lua APIにトランスパイル。Dependencies: property-write-helpers, shiori-async-talk
 
+### 将来仕様（doc/spec 廃止時の申し送り）
+
+manual-ssot-authority で旧文法仕様をマニュアルへ吸収した際に、マニュアルへ収録しなかった将来項目（B＝brief 起票済み、R＝キー行のみ）と、実装照合で見つかった未記載構文のバグ候補を 1 項目 1 行で申し送る。根拠と実装照合は `manual-ssot-authority` の吸収台帳（`.kiro/specs/completed/manual-ssot-authority/absorption-ledger.md`）にある。
+
+- シーン属性のセマンティクス（B1） — 属性によるシーンへのメタデータ付与、ファイルレベル属性の継承と上書き（ローカルシーンには影響しない）、Call の属性フィルター（`＞シーン＆k＝v`・比較演算子・複数条件の結合）。現行は構文の受理と内部の登録表への記録まで — `.kiro/specs/scene-attribute-semantics/brief.md`
+- ✅ 動的単語参照 `＠＄`（B2） — 実装済み。`＠＄変数名` で変数の値を単語キーとして参照し、`＠＄変数名（…）` で変数の値を関数名として呼ぶ — `.kiro/specs/completed/dynamic-word-reference/`
+- 動的コールの nil ガード — `＞式` の値が nil のとき `tostring` で `"nil"` になり、`ACT_IMPL.call` の nil ガード（`dynamic-call-variable` R3-AC5）が働かない。マニュアル `call-jump.md` は現行挙動（`"nil"` で検索）を書いており、どちらを正とするか未決定（`dynamic-word-reference` の RN-4 で発見） — `.kiro/specs/dynamic-call-nil-guard/brief.md`
+- シーンのパラメータ（R1） — シーン宣言での名前付きパラメータ。対応予定なし。現行は Call の位置引数とシーン引数 `＄０`… で代替できる — （brief なし）
+- アクタースコープ内コードブロックの用途（R2） — アクター固有のイベントハンドラ・状態管理関数としての用途。現行は `lua` ブロックで定義した値・関数がアクター付きの単語参照（A1）から使えるだけで、式の呼び出し・イベントからは届かない — （brief なし）
+- Call の戻り値と変数代入（R3） — `＄x＝＞シーン` のような呼び出し結果の代入。DSL では定義せず、ランタイム設計の領域 — （brief なし）
+- さくらスクリプトの `\]`・`\%`（R4） — 角括弧内の `\]`（`]` を文字として含める）と `\%` を DSL から書けるようにするか。現行は `\]` を特別扱いせず、`\%` はパースエラー — （brief なし）
+- BOM 付きファイルの受理（R5） — UTF-8 の BOM 付き `.pasta` を受理するか。現行はパースエラー — （brief なし）
+- 継続行内の空行の糖衣構文（R6） — 行継続の途中の空行を改行として出力する糖衣構文。現行は何も出力しない — （brief なし）
+
+#### 未記載構文のバグ候補
+
+- 単語定義行の行末コメント（U06） — 引用なしの単語値の後ろの `＃…` がコメントにならず、最後の値に取り込まれる — `manual-ssot-authority` の吸収台帳を参照
+- `\\` エスケープ（U08） — アクション行の `\\` が `\` 1 文字になり、直後の文字とさくらスクリプトのタグを作る（`\` の表示に `\\\\` が要る） — `manual-ssot-authority` の吸収台帳を参照
+- 括弧式の中の演算（U12） — `（1＋2）＊3` の括弧内が最初の項しか残らず `(1) * 3` になる — `manual-ssot-authority` の吸収台帳を参照
+- 未定義の `＠＊関数（）`（U18） — GLOBAL に無い関数の呼び出しが Lua の実行時エラーになり、イベントが 500 になる — `manual-ssot-authority` の吸収台帳を参照
+- 未登録アクターのアクション行（U19） — アクター辞書にも `[actor]` にも無い名前のアクション行が実行時エラー（500）になる — `manual-ssot-authority` の吸収台帳を参照
+- act のメンバー名と同じアクター名（U20） — `talk`・`word`・`call` などと同名のアクターのアクション行が実行時エラーになる — `manual-ssot-authority` の吸収台帳を参照
+- 末尾が数字のシーン名（U21） — 内部名（名前＋通し番号）が別名シーンと重なり、`＞A1` が `A` を選ぶ・同じシーン表を共有することがある — `manual-ssot-authority` の吸収台帳を参照
+- 数値にできない被演算子の算術（U22） — 数字でない文字列・未代入の変数・nil を返す関数の算術が実行時エラー（500）になる — `manual-ssot-authority` の吸収台帳を参照
+- REG ハンドラの戻り値の二重包み（U23） — `RES.ok(…)` などの応答を返すとさらに `RES.ok` で包まれ、不正な SHIORI 応答になる — `manual-ssot-authority` の吸収台帳を参照
+- 改行を含む引用文字列（U24） — 改行入りの文字列値（1 ファイルに `""` を 2 つ以上書いた場合を含む）で生成 Lua が構文エラーになり、ランタイムの初期化全体が失敗する — `manual-ssot-authority` の吸収台帳を参照
+- 単語値の `「」`・`""`（U25） — 単語定義の値では空文字列にならず、囲み文字そのものが候補の値になる — `manual-ssot-authority` の吸収台帳を参照
+- pasta.toml の `[lua]` セクション（U26） — `[lua] libs` がロード時に読まれず、標準ライブラリ・mlua-stdlib の構成が変わらない — `manual-ssot-authority` の吸収台帳を参照
+- 選択肢の自動ルーティングの探索範囲（U27） — 既定の OnChoiceSelectEx が直前のグローバルシーンのローカルシーンだけを探し、グローバルシーンへフォールバックしない — `manual-ssot-authority` の吸収台帳を参照
+- 別グローバルシーンへの Call 後のローカル探索（U28） — 呼んで戻ったあとの Call・ローカル単語参照が、呼ばれた側のローカルシーンを探す — `manual-ssot-authority` の吸収台帳を参照
+- セレクタの整数値が使われない（U29） — `set_scene_selector`・`set_word_selector` の整数値が選択に使われず、シャッフルが止まるだけ — `manual-ssot-authority` の吸収台帳を参照
+- 記号を含むグローバルシーン名（U30） — 登録時に英数字以外が `_` に置換され、元の名前で検索・Call できない — `manual-ssot-authority` の吸収台帳を参照
+- 選択肢の自動ルーティングが表示ラベルで探す（U31） — 既定の OnChoiceSelectEx が Reference0（表示テキスト）を選択 ID として読み、表示名付きの選択肢が 204 になる — `manual-ssot-authority` の吸収台帳を参照
+- `[logging] rotation_days` が使われない（U32） — 設定しても読まれず、ログファイルがローテーションされない — `manual-ssot-authority` の吸収台帳を参照
+
 ## Phase 3: 脆弱性監査・コード簡素化
 
 全クレートを対象に、同一仕様（外部振る舞い不変）のまま、脆弱性回避とコード量削減を実施する。
@@ -57,7 +92,7 @@ SSPのプロパティシステムへのアクセスをpastaゴーストから可
 ## Phase 4: 利用者マニュアルサイト
 
 pasta ゴースト作者向けの利用者マニュアルを、mdBook で**サーバー不要の静的 HTML+JS サイト**として構築する。
-既存の `doc/spec/` Markdown 資産を流用し、文法・Lua API・入門チュートリアルを検索可能な単一サイトに統合する。
+文法・Lua API・`pasta.toml`・入門チュートリアルを検索可能な単一サイトに統合する。マニュアルは利用者向け情報の唯一の権威であり、スキル `references/` の利用者向け部分はマニュアルから生成する（`gen-skill-refs.mjs`。鮮度とリンクは CI の `--check`・`link-check.mjs` が保証する）。
 
 ### アプローチ決定（Phase 4）
 - **採用**: mdBook（Rust 製・cargo bin に導入済み・追加エコシステム依存ゼロ）。`mdbook build` が静的 HTML+JS（クライアント側 elasticlunr 全文検索・`.nojekyll` 同梱）を出力 → GitHub Pages 等にサーバー不要で公開可能（実機検証済み: mdbook v0.5.3）
@@ -68,15 +103,65 @@ pasta ゴースト作者向けの利用者マニュアルを、mdBook で**サ�
 - [x] pasta-manual-syntax-highlight -- マニュアルの *.pasta コードブロックへ VSCode 同等のシンタックスハイライトを追加。VSCode TextMate 文法（SSOT）を build-time 再利用し hljs 互換クラスへ写像、出力は純静的。Dependencies: pasta-user-manual
 
 ### 将来仕様（Phase 4 派生・未着手）
-- [ ] pasta-runtime-internals-doc -- pasta Lua ランタイムの内部設計・アーキテクチャ解説（2パストランスパイル / yield-resume コルーチン / シーン検索 / ローダ自己展開 / SHIORI 非同期基盤）。読者＝コントリビュータ・実装理解者（利用者マニュアルとは読者層が異なる別境界）。Dependencies: pasta-user-manual
-  - 由来: pasta-user-manual の設計ディスカッションで「ランタイム内部設計は本仕様外・将来仕様」と決定（R5 は API 使用法に限定）
-- [ ] manual-ssot-authority -- マニュアル全体の SSOT/権威化の再編。「mdBook に書く項目は mdBook を権威にする」方針を確立し、文法・Lua 含めた `doc/spec` との並行管理（drift-check 方式）を見直す。Dependencies: pasta-user-manual
+
+discovery（2026-10-01）で両仕様を起票。依存順は manual-ssot-authority → pasta-runtime-internals-doc。
+
+- [x] manual-ssot-authority -- マニュアル全体の SSOT/権威化の再編。旧文法仕様ディレクトリを mdBook へ吸収・廃止し、旧乖離検出機構をリンク検証（`link-check.mjs`）と生成物鮮度チェック（`gen-skill-refs.mjs --check`）へ置換、`GRAMMAR.md` 廃止。読者で線引きし、利用者向け（文法・公開 Lua API・`pasta.toml`）は mdBook を権威としてスキル `references/` を mdBook から自動生成（スキルは別リポジトリへ持ち出すため自己完結を維持）、AI 作業手順（作例・規約・テスト/lint）はスキル手書きを権威とする。権威移行と生成切替を 1 spec で一括完了。Dependencies: pasta-user-manual
   - 由来: pasta-manual-debugging の discovery（2026-06-08）でユーザーが「mdbook に書いてる項目は mdbook を権威にしたい／別仕様で権威化の整理をすべき」と指摘。本仕様外・別仕様として申し送り
+  - brief.md 作成済み（`.kiro/specs/completed/manual-ssot-authority/brief.md`）
+  - 完了（2026-10-02）。吸収台帳は `.kiro/specs/completed/manual-ssot-authority/absorption-ledger.md`
+- [x] pasta-runtime-internals-doc -- pasta ランタイムの内部設計・アーキテクチャ解説（トランスパイル / yield-resume コルーチン / シーン検索 / ローダ自己展開 / SHIORI 非同期・アクター基盤 / デバッグ・ソースマップ / シーンキック）。読者＝コントリビュータ・実装理解者。同一 mdBook の末尾に「内部設計」パートとして置く。`OPTIMIZATION.md` を吸収・廃止、スキル `internal-modules` を mdBook 権威＋生成へ移行、クレート README の内部解説を移設。鮮度維持は kiro-complete DoD の追従確認＋review-improvement-loop 次元⑦の照合。Dependencies: manual-ssot-authority
+  - 由来: pasta-user-manual の設計ディスカッションで「ランタイム内部設計は本仕様外・将来仕様」と決定（R5 は API 使用法に限定）
+  - 完了（2026-10-03）。成果: マニュアル「内部設計（コントリビュータ向け）」パート・Gate 7・吸収台帳（`.kiro/specs/completed/pasta-runtime-internals-doc/absorption-ledger.md`）
+
+#### トランスパイラ最適化の将来候補（旧最適化メモ廃止時の申し送り）
+
+いずれも未実装。現行の生成時最適化はマニュアルの [内部設計: トランスパイルパイプライン](https://ekicyou.github.io/pasta/internals/transpiler.html#生成時最適化) が書く。
+
+- 定数畳み込み — トランスパイル時に定数式を評価する（旧優先度 Medium） — （brief なし）
+- デッドコード削除 — 到達不能コードを生成しない（旧優先度 Low） — （brief なし）
+- インライン展開 — 小さなローカルシーンを呼び出し元に展開する（旧優先度 Low） — （brief なし）
+- 単語プリフェッチ — 単語辞書を先読みする（旧優先度 Medium） — （brief なし）
+
+#### 内部設計執筆で判明したバグ候補（pasta-runtime-internals-doc からの申し送り）
+
+内部設計パートの執筆で現行実装と照合した際に見つかった不備。章には現行挙動だけを書いている。根拠（ソースの所在・確認方法）は本 spec の吸収台帳（`.kiro/specs/completed/pasta-runtime-internals-doc/absorption-ledger.md`）の付録 B にある。
+
+- シーン・アクター名のサニタイズと検索キーの不一致 — 登録キーはサニタイズ済みの名前、検索は元の名前のため、置換される文字を含むシーン名・アクター名の Call・アクター単語参照が一致しない（U30 をアクター名・ローカルシーンへ広げたもの） — 吸収台帳付録 B を参照
+- グローバルシーン検索がローカルのキーを除外しない — `search_scene(名前, nil)` が `:` で始まるローカルのキーも候補にし、`:` で始まる動的な値で任意の親グローバルシーンの `__start__` が選ばれうる — 吸収台帳付録 B を参照
+- コールバック再開後の継続の消失 — `CALLBACK.try_route` が再開後に `set_co_scene` を呼ばず、`get_property` の後のチェイントークの続きと出力の無い最初の中断が失われる — 吸収台帳付録 B を参照
+- CT（`ct.lua`）が LuaJIT で機能しない（既知負債） — `IMPL` に `__index` が無く、`__close` も LuaJIT では呼ばれない。修正か撤去かの判断を要する — 吸収台帳付録 B を参照
+- コールバックのタイムアウト応答の二重包み — `CALLBACK.sweep` が返す `RES.err(…)` の全文を `EVENT.fire` が `RES.ok` で包み、`Value` に 500 応答を持つ 200 になる（U23 と同じ機構の内部経路） — 吸収台帳付録 B を参照
+- タイムアウト掃引で再開結果が捨てられ予約が残る — `CALLBACK.sweep` が `coroutine.resume` の結果を捨て、`_staged` が残って次のイベントでエラーか誤登録になる — 吸収台帳付録 B を参照
+- モジュール名に `.` を含むファイル名 — `dic/v1.2.pasta` などのキャッシュを searcher が見つけられず、`pasta.scene_dic` の `require` が失敗して起動が止まる — 吸収台帳付録 B を参照
+- 設置パスの glob メタ文字 — 基準ディレクトリをエスケープせずに `glob` へ渡すため、`[`・`]` を含む設置パスでファイルが見つからないか起動が止まる — 吸収台帳付録 B を参照
+- `.pasta` と `.lua` の同名衝突の判定 — 衝突判定の `module_key` が実際のモジュール名と異なる規則で `dic` を除き、誤除外かキャッシュの上書きが起きる — 吸収台帳付録 B を参照
+- ランダムトークの間隔が起動ごとに同じ — ランタイムが `math.randomseed` を呼ばず、OnTalk の間隔が起動のたびに同じ並びになる — 吸収台帳付録 B を参照
+- `unload` を経ないプロセス終了での 5 秒停滞 — `DllMain` の detach が完了通知の来ない teardown を `TEARDOWN_TIMEOUT` まで待ち、`SHIORI.unload` と保存も行われない — 吸収台帳付録 B を参照
+- ACT のグループ化がトークンを捨てる・並べ替える — `group_by_actor` が最初の発言より前の表示制御を捨て、スポット変更でグループを閉じない — 吸収台帳付録 B を参照
+- 位置からのキックの前方一致 — `KICK.try_dispatch` が前方一致の検索で引くため、名前が接頭辞になる別シーン（`会話1` に対する `会話10` など）が再生されうる — 吸収台帳付録 B を参照
+- 末尾が数字のシーン名のシーン identity 索引漏れ — `split_runtime_global` が名前末尾の数字まで連番とみなし、その範囲のキックが別のシーンを選ぶ（U21 のデバッグ基盤側の現れ） — 吸収台帳付録 B を参照
+- Windows で同じデバッグポートへの二重 bind が成功する — `SO_REUSEADDR` のため 2 つ目のゴーストも bind に成功し、接続先が定まらない — 吸収台帳付録 B を参照
+- C のフレームを挟むと下位フレームの変数がずれる — `variables` が C のフレームを数える `lua_getstack` のレベルをそのまま使い、別のフレームの変数を表示する — 吸収台帳付録 B を参照
+- FFI 入口スレッドのログの破棄 — `request`・`unload`・`DllMain` の detach で `LoadDirGuard` が張られず、本番でそれらのログがファイルに残らない — 吸収台帳付録 B を参照
+- ログフィルタの再読み込み不整合 — `[logging]` の無い再読み込みで前のフィルタが残り、`file_path` が不正だと `level`・`filter` も効かず既定ファイルに書き続ける（利用者章 `reference/pasta-toml.md` と食い違う） — 吸収台帳付録 B を参照
+- ANSI コードページが UTF-8（65001）の Windows での `@enc.to_ansi`（要実機確認） — `WideCharToMultiByte` に 65001 で許されないフラグと引数を渡し、変換が失敗すると読める — 吸収台帳付録 B を参照
+- `encoding` の未使用の公開関数 — `to_ansi_bytes`・`path_from_lua` に呼び出し元が無く、`path_from_lua` は非 ASCII を正しく変換できない（不要コード候補） — 吸収台帳付録 B を参照
+- Call から戻った後のシーン文脈 — `ACT_IMPL.call` が `current_scene`・`STORE.last_global_scene` を復元せず、呼び出し元の単語・Call と以後の選択肢が呼び出し先で解決される（U28 の原因。選択肢の探索範囲にも及ぶ） — 吸収台帳付録 B を参照
+- アクター付きの名前の解決で ACT を前提とする関数にプロキシが渡る — アクション行の `＠yield`・`＠ゴースト終了`・値が `yield` の `＠＄x` などが、プロキシを ACT として扱う関数に渡ってエラーになる — 吸収台帳付録 B を参照
+
+#### 内部設計執筆からのその他の申し送り（利用者章の改訂候補）
+
+既存の利用者向け章は本 spec の範囲外として改訂していない。根拠は同じく吸収台帳の付録 B にある。
+
+- 作例章とスクリプト用 API 章の重なりの整理 — `lua/patterns.md` の早見表・呼び出し形を API の権威 `lua/script-api.md` へのリンクに寄せ、あわせて作例の誤り（`WORD.create_local("メイン_1", …)` のシーン名、末尾の不要な `act:yield()`、「`＠関数名()` はローカル呼び出し」の説明、`act:yield()` 直後の表示制御が出力されない例）を直す。シーン関数末尾の不要な `act:yield()` は `lua/dsl-vs-lua.md`・pasta-lua-coding スキルの SKILL.md（DSL→Luaブリッジ基本形）・`.kiro/steering/tech.md` の作例にもある — 吸収台帳付録 B を参照
+- `reference/pasta-toml.md` の `[loader] debug_mode` の説明 — 孤立キャッシュの warn は `debug_mode` に関わらず出る（`true` のときはローダが各パスを重ねて出す）が、章は `true` のときだけ出るように書いている — 吸収台帳付録 B を参照
+- デバッグ接続の 1 起動 1 回の制限 — 切断後は SHIORI を読み込み直すまで attach できないことを `debug/troubleshooting.md` に追記する — 吸収台帳付録 B を参照
 
 ### Phase 4 派生（デバッグ利用者ガイド）
 - [x] pasta-manual-debugging -- VSCode Lua デバッグ（`.pasta` ソースレベルまで完全網羅）の利用者向けデバッグ章を mdBook マニュアルに追加。有効化／`launch.json`／attach／BP・ステップ・変数 inspect・提示モード切替／構造的制約と緩和策。ルート `DEBUGGING.md` をマニュアルへ統合・最新化しリダイレクト化（mdBook を権威）。Dependencies: pasta-vscode-lua-debug, pasta-source-map, pasta-user-manual
   - discovery 決定（2026-06-08）: DEBUGGING.md = マニュアルに一本化（推奨案）、スコープ = `.pasta` ソースレベルまで完全網羅。brief.md 作成済み（`.kiro/specs/completed/pasta-manual-debugging/brief.md`）。マニュアル全体の権威化再編は manual-ssot-authority へ分離
-  - 実装完了 2026-06-08（全8タスク・各独立レビュー APPROVED・機能レベルバリデーション GO・mdbook build/verify-content(G+A〜F)/verify-static/verify-search/drift-check 全緑）。spec 完了フロー未実施
+  - 実装完了 2026-06-08（全8タスク・各独立レビュー APPROVED・機能レベルバリデーション GO・mdbook build/verify-content(G+A〜F)/verify-static/verify-search/当時の文法乖離チェック（manual-ssot-authority で撤去） 全緑）。spec 完了フロー未実施
 
 ### Phase 5 派生（デバッグ観測性）
 - [x] debug-startup-logging -- pasta_lua デバッグバックエンドの `enable()` に「デバッグ有効化・DAP 待ち受け開始（実バインドアドレス `host:port`）」の `info!` 起動ログを追加し、`pasta.log` で起動確認できるようにする。無効時は無言・ゼロコスト維持。Dependencies: pasta-vscode-lua-debug
@@ -173,8 +258,8 @@ Phase 5 でデバッガ（DAP バックエンド）を組み込んだ結果、�
 - [x] pasta-scene-kick -- キック機能本番化。**即時再生オンリー**（設計ディスカッション 2026-06-23 で talk FIFO／Status-gated drain／非即時モードを廃止し、既存 `co_scene` 継続機構の流用＋初回ビートのみ `is_blocked` ワンショット突破＋即時 preempt-and-abort へ改訂）＋VSCode `playScene` キックコマンド＋debug DAP チャネル一般化（custom request）＋debug backend のアクタークライアント化（`KickSink` 汎用 seam でクレート依存方向 `pasta_shiori`→`pasta_lua` 順守）＋ctx 合成は通常トーク再生を流用。Dependencies: pasta-actor-runtime。**完了 2026-06-23（全19サブタスク・17実装コミット・機能レベルバリデーション GO・cargo test --workspace 2139 passed/0 failed・VSCode test:unit 緑・要件28基準全充足・依存方向／境界監査クリーン・キック未使用バイト不変）**。brief.md（`.kiro/specs/completed/pasta-scene-kick/brief.md`）
 
 ### 将来境界（Phase 7 派生・未着手）
-- [ ] pasta-sstp-live-output -- ライブ SSP への SSTP/`\![raise]` による push 出力経路（pull 契約を介さない即時出力）。Dependencies: pasta-scene-kick
-- [ ] pasta-authoring-window -- `*.pasta` 編集/プレビュー専用ウィンドウ。executor スレッドにメッセージポンプ同居させ、`!Send` VM へ同スレッド直接アクセス（マーシャリング不要）。Dependencies: pasta-scene-kick
+- ~~pasta-sstp-live-output~~ -- **却下（2026-10-01 discovery）**。ライブ SSP への SSTP/`\![raise]` push 出力経路。実体は Phase 7 discovery で却下されたキック出力の対案で、独立した利用者・用途は一度も記録されていない。本来の目的（VSCode から編集中トークを即喋らせる）は pasta-scene-kick（≤1秒 pull 配信）＋pasta-scene-kick-from-cursor で達成済み。ゴースト自発の非同期出力等の新たな動機が生じたら、その動機から新規に起票する
+- ~~pasta-authoring-window~~ -- **却下（2026-10-01 discovery）**。`*.pasta` 編集/プレビュー専用ウィンドウ（executor スレッド同居・`!Send` VM 直接アクセス）。本来の目的（ゴースト辞書のライブ修正）は VSCode（LSP・ハイライト・ソースレベルデバッグ・カーソル位置キック）で実現済みのため当面不要。VSCode 非依存のオーサリング環境が必要になったら再検討する
 - `pasta_novel` アダプタ（ノベルゲーム宿主）は遠い将来。本フェーズの宿主非依存コア＋presentation event stream 契約がそれを可能にする土台となる
 
 ## Phase 8: バルーン表示品質（さくらスクリプト出力）
@@ -185,8 +270,8 @@ Phase 5 でデバッガ（DAP バックエンド）を組み込んだ結果、�
 - [x] sakura-script-newline -- キャラ切替時の段落区切り改行を eager（`\p` 直前・先出し）から fully-lazy（切替で保留し、再登場スコープの次の一般文字列直前でフラッシュ）へ変更。A→B 終了・同一スポット共有交代・全さくらスクリプト手番のゴミ改行を根絶。Dependencies: none。実装完了・全テスト green（`cargo test --all` 含む）。Task 5.1（実機SSP目視）は開発者による手動検証待ち。
 
 ### Phase 8 派生（未着手）
-- [ ] actor-surface-restore -- 同一スポットを複数アクターが共有して交代する際の、切替先アクターの立ち絵（サーフェスID・着せ替え状態）の復旧。Dependencies: sakura-script-newline
-  - 由来: sakura-script-newline の要件ディスカッション議題2（2026-07-18）でユーザーが「同一スコープでキャラが変わる場合、立ち絵の復旧が必要」と指摘。段落区切り改行（string 順序）とサーフェス状態管理（アクター状態機械）は責務が異なるため別仕様へ分離。brief.md 作成済み（`.kiro/specs/actor-surface-restore/brief.md`）
+- [x] actor-surface-restore -- 同一スポットを複数アクターが共有して交代する際の、切替先アクターの立ち絵（サーフェスID・着せ替え状態）の復旧。Dependencies: sakura-script-newline
+  - 由来: sakura-script-newline の要件ディスカッション議題2（2026-07-18）でユーザーが「同一スコープでキャラが変わる場合、立ち絵の復旧が必要」と指摘。段落区切り改行（string 順序）とサーフェス状態管理（アクター状態機械）は責務が異なるため別仕様へ分離。brief.md 作成済み（`.kiro/specs/completed/actor-surface-restore/brief.md`）
 
 ## Phase 9: 起動堅牢性（モジュールロード）
 
@@ -194,3 +279,10 @@ areka 実機検証（2026-09-18）で発覚した、深いフォルダへ設置�
 
 ### Specs (dependency order)
 - [x] lua-require-robustness -- (B) `pasta.shiori.entry` のロード失敗を握りつぶさず既存の 500 + `X-ERROR-REASON` 経路（load-error-logging）へ伝搬 → (A) `package.loaders` へ Rust 実装 searcher を前置し、LuaJIT の narrow fopen（MAX_PATH=260・ANSI コードページ制限）を回避。チャンク名は現行形式と厳密一致（ソースマップ無回帰）。Dependencies: none。brief.md 作成済み（`.kiro/specs/completed/lua-require-robustness/brief.md`）
+
+## Phase 10: 配布物の形（pasta_check release）
+
+areka alpha の実機ラップ（2026-10-02・A3r 項目 8）で発覚した、同梱バルーンのファイルがゴーストの `updates.txt` に載り、ネットワーク更新でゴースト配下へ誤配置される不具合への対処。emo2 開発セッション（ghost_dev）からのブリーフィングで discovery（2026-10-02）。方針は「pasta_check 側で汎用に直す（案 A）」でユーザー決定済み。
+
+### Specs (dependency order)
+- [x] pasta-check-bundled-balloon -- `install.txt` の `balloon.source.directory`／`balloon.directory` で同梱バルーンを判定し、その配下をゴーストの `updates.txt`（ルート・`ghost/master`）から除外、同梱バルーン直下へバルーン用 `updates.txt` を生成して nar に封入。`homeurl` 欠落は警告。同梱バルーンの無いゴーストは date 以外バイト不変・改行変換なし。Dependencies: none。完了後に `release-workflow` で crates.io へ出し、emo2 開発セッションへバージョンを連絡する。実装済み（`.kiro/specs/completed/pasta-check-bundled-balloon/`）

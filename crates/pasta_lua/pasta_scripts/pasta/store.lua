@@ -5,8 +5,8 @@
 --- 他のモジュールから require されるが、自身は他モジュールを require しない。
 --- これにより循環参照を完全に回避する。
 ---
---- 注意: 永続化データ(save)はpasta.saveモジュールに移行済み。
---- ctx.saveから参照すること。
+--- 注意: 永続化データ(save)は pasta.save モジュールが持つ。
+--- act.save（act:init_scene の戻り値 save）から参照すること。
 
 --- @class Store
 --- @field actors table<string, Actor> アクターキャッシュ（名前→アクター）
@@ -17,6 +17,8 @@
 --- @field local_words table<string, table> ローカル単語レジストリ（scene_name → {key → values[][]}）
 --- @field actor_words table<string, table> アクター単語レジストリ（actor_name → {key → values[][]}）
 --- @field app_ctx table アプリケーション実行中の汎用コンテキストデータ
+--- @field appearance table 外見状態（セッション常駐・非永続）
+--- @field co_callback thread|nil コールバック待ちとして登録したコルーチンの印（下記参照）
 local STORE = {}
 
 --- アクターキャッシュ（名前→アクター）
@@ -51,6 +53,11 @@ STORE.actor_words = {}
 --- @type table
 STORE.app_ctx = {}
 
+--- 外見状態（アクター既知状態・スポット表示中状態・スポットの直前発話アクター・アクターの前回発話スポット）
+--- セッション常駐のみ。pasta.save（永続化）には置かない。
+--- @type table
+STORE.appearance = { actors = {}, spots = {}, owners = {}, last_spots = {} }
+
 --- 継続用コルーチン（OnTalkチェイントーク用）
 --- @type thread|nil
 STORE.co_scene = nil
@@ -67,10 +74,16 @@ STORE.kick_pending = nil
 --- @type boolean
 STORE.kick_force = false
 
+-- STORE.co_callback（thread|nil）はこのモジュールでは初期化しない（未設定は nil）。
+-- pasta.shiori.event.callback の CALLBACK.consume_staged が設定し、
+-- pasta.shiori.event の set_co_scene と CALLBACK.reset が nil に戻す。STORE.reset は触らない。
+
 --- 全データをリセット
 --- @return nil
 function STORE.reset()
-    -- co_sceneのクリーンアップ（suspendedコルーチンをclose）
+    -- co_sceneのクリーンアップ（coroutine.close がある環境では suspended コルーチンを close）。
+    -- LuaJIT 2.1 には coroutine.close が無いため close 分岐は実行されず、参照を外すだけになる
+    -- （破棄したコルーチンは GC が回収する）。
     if STORE.co_scene then
         if coroutine.close and coroutine.status(STORE.co_scene) == "suspended" then
             coroutine.close(STORE.co_scene)
@@ -86,6 +99,7 @@ function STORE.reset()
     STORE.global_words = {}
     STORE.local_words = {}
     STORE.actor_words = {}
+    STORE.appearance = { actors = {}, spots = {}, owners = {}, last_spots = {} }
     STORE.last_global_scene = nil
     STORE.kick_pending = nil
     STORE.kick_force = false

@@ -2,7 +2,7 @@
 // （review-improvement-loop セル 3.58 / G1 テスト網羅・要件 2.2）。
 //
 // 背景:
-//   verify-drift-gate.mjs（タスク 7.3）と verify-content.mjs（タスク 7.4）は
+//   verify-content.mjs（タスク 7.4）は
 //   import 時に検証本体を即実行する構造のため、本体を改変せずに関数単体テストは
 //   できない。代わりに子プロセスとして実行し、
 //     - exit 0 で完走する（結線・構文・依存の回帰検出）
@@ -46,20 +46,6 @@ function runScript(name) {
 }
 
 // ============================================================
-log('\n== verify-drift-gate.mjs（ドリフト検出・完了ゲート検証） ==');
-{
-  const r = runScript('verify-drift-gate.mjs');
-  const out = r.stdout || '';
-  check('exit 0 で完走', r.status === 0, `status=${r.status} stderr=${(r.stderr || '').slice(0, 300)}`);
-  const m = out.match(/合計 (\d+) 件 \/ 失敗 (\d+) 件/);
-  check('サマリ行を出力（合計/失敗）', !!m, out.slice(-300));
-  check('実際に多数のチェックを実行（>= 20 件）', m && Number(m[1]) >= 20,
-    m ? `合計=${m[1]}` : '(サマリなし)');
-  check('失敗 0 件', m && Number(m[2]) === 0, m ? `失敗=${m[2]}` : '(サマリなし)');
-  check('RESULT: OK を出力', /RESULT: OK/.test(out), out.slice(-200));
-}
-
-// ============================================================
 log('\n== verify-content.mjs（コンテンツ整合・網羅レビュー検証） ==');
 {
   const r = runScript('verify-content.mjs');
@@ -71,6 +57,15 @@ log('\n== verify-content.mjs（コンテンツ整合・網羅レビュー検証�
     m ? `検証項目=${m[1]}` : '(サマリなし)');
   check('FAIL 0 件', m && Number(m[3]) === 0, m ? `FAIL=${m[3]}` : '(サマリなし)');
   check('RESULT: OK を出力', /RESULT: OK/.test(out), out.slice(-200));
+  // 内部設計パート（I 系）が空回りしていない: 10 章の構造検査・題材章 8 章の必須 H2・機構網羅が走る。
+  const count = (re) => (out.match(re) || []).length;
+  check('I-structure を内部設計 10 章に実行', count(/PASS {2}\[I-structure:/g) === 10,
+    `I-structure PASS=${count(/PASS {2}\[I-structure:/g)}`);
+  check('I-sections を題材章 8 章に実行', count(/PASS {2}\[I-sections:/g) === 8,
+    `I-sections PASS=${count(/PASS {2}\[I-sections:/g)}`);
+  check('I-fact（機構網羅・概要章）を実行', count(/PASS {2}\[I-fact:/g) === 2,
+    `I-fact PASS=${count(/PASS {2}\[I-fact:/g)}`);
+  check('口調検査の走査対象に内部設計パートを含む', /PASS {2}\[D-voice:book\/src\/internals\//.test(out));
 }
 
 // ============================================================

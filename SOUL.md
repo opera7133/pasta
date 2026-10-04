@@ -13,7 +13,7 @@ pastaプロジェクトのドキュメントは、以下の優先順位と役割
 
 #### Level 1: Constitution
 - **[SOUL.md](SOUL.md)** - プロジェクトの憲法（Why: ビジョン、コアバリュー、あるべき姿）
-- **[GRAMMAR.md](GRAMMAR.md)** - 利用者向けクイックリファレンス（例文豊富な学習用資料）
+- **[利用者マニュアル](book/src/)** - 利用者向け仕様（文法・公開 Lua API・`pasta.toml`）の唯一の権威（公開: https://ekicyou.github.io/pasta/）
 - **[CLAUDE.md](CLAUDE.md)** - AI開発支援（Kiro workflow、ステアリング）
 
 #### Level 2: Implementation Layer
@@ -23,21 +23,20 @@ pastaプロジェクトのドキュメントは、以下の優先順位と役割
 - [pasta_dsl/README.md](crates/pasta_dsl/README.md) - DSLパーサーAPI
 - [pasta_core/README.md](crates/pasta_core/README.md) - レジストリAPI
 - [pasta_lua/README.md](crates/pasta_lua/README.md) - Luaトランスパイラ・ランタイム
-- [pasta-lua-coding skill](.agents/skills/pasta-lua-coding/SKILL.md) - Lua APIリファレンス（references/に詳細）
+- [pasta-lua-coding skill](.claude/skills/pasta-lua-coding/SKILL.md) - Lua APIリファレンス（references/に詳細）
 - [pasta_lsp/README.md](crates/pasta_lsp/README.md) - Language Server Protocol実装
 - [pasta_shiori/README.md](crates/pasta_shiori/README.md) - SHIORI DLLインターフェース
 - [pasta_sample_ghost/README.md](crates/pasta_sample_ghost/README.md) - サンプルゴースト
 
 **品質管理ドキュメント**:
 - [TEST_COVERAGE.md](TEST_COVERAGE.md) - テストカバレッジマップ
-- [OPTIMIZATION.md](OPTIMIZATION.md) - トランスパイラ最適化リファレンス
+- [内部設計: トランスパイルパイプライン（生成時最適化）](https://ekicyou.github.io/pasta/internals/transpiler.html#生成時最適化) - トランスパイラ最適化の解説
 - [SCENE_TABLE_REVIEW.md](SCENE_TABLE_REVIEW.md) - シーンテーブル設計レビュー
 
 #### Level 3: Steering (AI向け)
 - [.kiro/steering/](/.kiro/steering/) - AI向けプロジェクトルール（完全性優先）
-- [doc/spec/](doc/spec/) - 言語仕様書（章別分割、AI向け必要な章のみ参照）
 
-**ルール**: 仕様の衝突時は doc/spec/ を優先し、GRAMMAR.md・README.md を修正する
+**ルール**: 仕様の衝突時はマニュアル（`book/src/`）を優先し、README・steering・スキル手書きを修正する（スキルの生成ファイルはマニュアル章を直して再生成する）
 
 ---
 
@@ -359,7 +358,7 @@ act.ぱすた:talk("こんにちは！")
 
 #### 単語展開による動的テキスト
 
-`＠単語名` の参照は、実行時に `act:word("単語名")` として解決されます。
+`＠単語名` の参照は、実行時に `act:word("単語名")` として解決されます。`＠＄変数名` と書くと変数の値を単語名として同じ順序で解決します（act のメソッドには届きません）。
 
 **スコープ解決順序**:
 
@@ -476,7 +475,7 @@ Phase 0（一次設計の再構築）は完了しました。以下は各要素�
   - 8つのスナップショットテスト実装済み
   - comprehensive_control_flow.pastaは旧文法のためスキップ（TODO: 更新予定）
 - [x] スナップショットテスト整備（insta crate使用）
-- [x] 最適化レベルの文書化（OPTIMIZATION.md）
+- [x] 最適化レベルの文書化（[内部設計: トランスパイルパイプライン](https://ekicyou.github.io/pasta/internals/transpiler.html#生成時最適化)）
 
 #### ドキュメント整合性
 - [x] SOUL.md ⇔ SPECIFICATION.md 一貫性検証（完全）
@@ -518,8 +517,8 @@ Phase 0（一次設計の再構築）は完了しました。以下は各要素�
 
 **原則**: ドキュメントとコードは常に同期
 
-- SPECIFICATION.mdが権威的ソース
-- 実装変更時は必ず仕様書を更新
+- 利用者向け仕様はマニュアル（`book/src/`）が権威的ソース
+- 実装変更時は必ずマニュアル章を更新し、スキルの生成ファイルを再生成する
 - Gap Analysisによる定期的な整合性検証
 
 ### 7.4 UI独立性の徹底
