@@ -161,6 +161,9 @@ impl PastaLuaRuntime {
         // default and `source_map` is `None` (R5.2 / R5.5 / 7.1).
         let debug_file = pasta_config.as_ref().and_then(|c| c.debug());
         let runtime_config = runtime_config.with_debug_from_file_and_env(debug_file.as_ref());
+        // finalize_scene must re-register @pasta_search with the SAME alias table
+        // as the initial registration inside `with_config_and_source_map`.
+        let scene_aliases = runtime_config.scene_aliases.clone();
 
         // Create base runtime (installs the debug hook exactly once iff enabled,
         // and holds + forwards the source map to enable when present).
@@ -202,7 +205,7 @@ impl PastaLuaRuntime {
 
         // Register finalize_scene Rust binding to overwrite Lua stub (Requirement 4.3)
         // This must be done before loading scene_dic.lua which calls finalize_scene()
-        register_finalize_scene(&runtime.lua)?;
+        register_finalize_scene(&runtime.lua, scene_aliases)?;
 
         // ========================================
         // Module Loading Phase (all require-based)
@@ -226,7 +229,7 @@ impl PastaLuaRuntime {
         // この時点で BOTH が揃う: (a) loader が transpile 中に蓄積した
         // `(join_key, .pasta 宣言行)` 記録（`runtime.source_map` 内）、(b) finalize
         // （scene_dic ロードで実行済み）が登録した runtime 実シーン identity
-        // （`collect_scenes`）。両者を同一突合キーで突き合わせ、`.pasta` (ファイル,
+        // （シーン表の登録名を定義元 `.pasta` ファイルごとに分けたもの）。両者をファイルごとの順位で突き合わせ、`.pasta` (ファイル,
         // 行範囲) → (scene_id, parent) の `SceneIdentityIndex` を確定し、共有 `Arc<
         // SourceMap>` の write-once `scene_index` スロットへ充填する（resolver=task 3.1
         // が読む）。

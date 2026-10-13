@@ -1,7 +1,10 @@
 # SHIORI 層
 
-ごきげんよう。ベースウェアからの呼びかけを受け止め、ゴーストの言葉を返す――それが SHIORI 層の務めですわ。
-FFI の境界からアクター、イベント配送、DLL のビルド構成まで、わたくしがきっちり捌いて差し上げます。さあ、参りましょう。
+> 【したり顔】ベースウェアの呼びかけを受け止め、ゴーストの言葉を返す――それが SHIORI 層の務めですわ。FFI の境界からアクター、イベント配送、DLL のビルド構成まで、きっちり捌いて差し上げます。
+
+> 【アンソニー】VM には専用の部屋をあてがい、取り次ぎは郵便受け一つきり――執事の私には、他人事と思えぬ仕組みでございます。
+
+> 【冷笑】あなたより、よほど律儀な取り次ぎ役ですわよ。届いた順に、一通ずつ必ず捌きますもの。
 
 ---
 
@@ -229,10 +232,51 @@ teardown_via_sender(tx, timeout)
 ```
 
 - `Stop` は他のメッセージと同じ FIFO を通るため、先に積まれたメッセージを処理し終えてからループを抜ける。
-- `PastaShiori` の `Drop` は、キャッシュした `SHIORI.unload` を呼び、ロガーの登録を外し、キャッシュした関数を捨ててからランタイムを破棄する。ランタイムの破棄で永続化データが保存される（[永続化](execution-model.md#永続化)）。DAP のバックエンドも VM の一部としてこのとき片付く。
+- `PastaShiori` の `Drop` は、キャッシュした `SHIORI.unload` を呼び（`call_lua_unload`）、続けて `release_runtime` でランタイムを手放す。`release_runtime` は次の順に進む。
+  1. 設置パスがあれば `LoadDirGuard` を張る（メソッドを抜けるまで保つ）。
+  2. キャッシュした Lua 関数を捨てる（VM を参照しているため、ランタイムより先に捨てる）。
+  3. ランタイムを破棄する。ここで永続化データが保存され（[永続化](execution-model.md#永続化)）、DAP のバックエンドも VM の一部として片付く。
+  4. info「Unregistering logger」を出す。
+  5. ロガーの登録を外す。最後の参照が落ち、フラッシュしてログファイルが閉じる。
+
+  登録を外すのを最後にするのは、`SHIORI.unload` の結果・永続化データの保存の失敗・登録解除の通知を、ファイルを閉じる前に書くためである（[FFI 入口と終了処理のログ](#ffi-入口と終了処理のログ)）。
 - 完了の通知は、VM の破棄と mailbox の受信側の破棄が終わってから送る。通知を受け取った時点で、VM と DAP バックエンドの解放は済んでいる。executor のメッセージ専用ウィンドウ（`wintf-winmsg-executor` の thread_local）は、その後 `block_on` が戻ってスレッドが終わるときに破棄される。
-- `DllMain` は `DLL_PROCESS_DETACH` で `unload()` を呼び、それ以外の通知では何もしない。`DllMain` はローダーロックを持ったまま呼ばれるため、そこでスレッドを起こさない。スレッドは `load` を起点に起こす。
-- 再読み込み（`unload` の後の `load`、または `load` の再呼び出し）は、`spawn_actor` の 1 で前のアクターを終わらせ、新しいスレッド・チャネル・VM を作る。`PastaShiori::load` の中にある、既存のランタイムを捨てて作り直す分岐は、FFI の経路では通らない（アクターごとに新しい `PastaShiori` を作るため）。
+- `DllMain` は `DLL_PROCESS_DETACH` のうち `FreeLibrary` によるもの（`lpReserved` が null）で `unload()` を呼び、それ以外の通知では何もしない。プロセスの終了による `DLL_PROCESS_DETACH`（`lpReserved` が null でない）では、他のスレッドが既に止められていてアクターが応答できないため、teardown せずに `true` を返す。そのため、`unload` を呼ばれずにホストのプロセスが終わったときは、`SHIORI.unload` も永続化データの保存も走らない。`DllMain` はローダーロックを持ったまま呼ばれるため、そこでスレッドを起こさない。スレッドは `load` を起点に起こす。
+- 再読み込み（`unload` の後の `load`、または `load` の再呼び出し）は、`spawn_actor` の 1 で前のアクターを終わらせ、新しいスレッド・チャネル・VM を作る。`PastaShiori::load` の中にある、既存のランタイムを捨てて作り直す分岐（info「Releasing existing runtime for reload」→ `release_runtime` → `last_load_error` を消す。`SHIORI.unload` は呼ばない）は、FFI の経路では通らない（アクターごとに新しい `PastaShiori` を作るため）。
+
+### FFI 入口と終了処理のログ
+
+ログの振り分けの規則は [ロギングとエンコーディング](logging-encoding.md#振り分けの規則) が書く。この節は、SHIORI の各入口と終了処理のログがその規則でどうなるかを書く。pasta.dll の登録簿のロガーは 0 個か 1 個である。
+
+| 入口・処理 | スレッドの文脈 | 扱い |
+| ---------- | -------------- | ---- |
+| アクタースレッド（メッセージループの観測ログ、`PastaShiori` の各メソッドのログ） | スレッドの入口で設置パスの `LoadDirGuard` を張り、スレッドの終わりまで保つ | 自分のロガーへ届く |
+| `loadu`・`load`（`load_entry`） | 無し。`load_impl` は入口名と成否の 1 行を出す間だけ張り直す | 最初のロード前の引数の誤りや設置パスを読めないときのログは、登録が無いので捨てる。`loadu` 済みで無視した `load` の warn は、登録されたロガーへ届く |
+| `request` | 無し | 不正なリクエストの warn、境界での panic の error、観測用の debug・trace は、ロガーが登録されていれば届く。`load` の前・`unload` の後は捨てる |
+| `unload` | 無し | teardown の異常の warn は後述 |
+| `DllMain` の detach（`FreeLibrary`） | 無し | `unload()` を呼ぶので、`unload` と同じ |
+| `DllMain` の detach（プロセスの終了） | — | 何もしないので、ログも出ない。`SHIORI.unload` と永続化データの保存も走らない |
+
+終了処理（`unload`、または `FreeLibrary` による detach）のログは、出る時点で次のように分かれる。
+
+```text
+FFI 入口のスレッド: send(Stop{done})
+  debug「Stop enqueued」                  … アクターの登録解除より前なら届く
+アクタースレッド: Stop を受けてループを抜け、drop(shiori)（PastaShiori の Drop）
+  SHIORI.unload・永続化データの保存のログ … 届く
+  info「Unregistering logger」            … 届く
+  ロガーの登録を外す（ファイルを閉じる）
+アクタースレッド: drop(rx) → done.send(())
+  debug「actor.done」                     … 捨てる
+FFI 入口のスレッド: recv_timeout(5 秒)
+  届いた       → debug「done ack received」 … 捨てる
+  Timeout      → warn                       … 届く（ロガーはまだ登録されている）
+  Disconnected → warn                       … 登録解除の後なら捨てる
+```
+
+- 完了の通知（done ack）の後のログは、ロガーが 1 つも登録されていないので捨てる。done ack を送る位置は変えないため、通知を受け取った時点で VM・DAP バックエンド・ログファイルの解放が済んでいる、という不変条件は保たれる。
+- Timeout のとき、アクターは終了処理の途中で、ロガーは登録されたままである。FFI 入口のスレッドの warn は唯一のロガーへ届く。Disconnected は巻き戻すプロファイルでの panic でしか起きず、そのときロガーが既に登録を外されていれば warn は捨てる。
+- ログを残すために、`unload` の戻り値（常に `true`）・待ち時間の上限（5 秒）・応答の内容は変えない。
 
 ### Lua 側の SHIORI エントリとイベント配送
 
@@ -268,15 +312,15 @@ pasta.shiori.entry
 1. `CALLBACK.try_route(req)` が応答を返せば、それを返す（待っているコールバックの再開）。
 2. `act = SHIORI_ACT.new(STORE.actors, req)` を作る。
 3. `REG[req.id]` があればそれを、無ければ `EVENT.no_entry` を `act` で呼ぶ。`EVENT.no_entry` は `SCENE.co_exec(act, req.id)` でイベント名のシーンを探し、見つかればそのコルーチンを、無ければ `nil` を返す（`pasta.scene` は循環を避けるため呼び出し時に `require` する）。
-4. 戻り値がコルーチンなら再開して応答にし、文字列なら `RES.ok` で包み、それ以外なら 204 を返す。コルーチンの扱いは [イベントからシーンへ](execution-model.md#イベントからシーンへ) で扱う。
+4. 戻り値がコルーチンなら `EVENT.drive` で再開し、その出力を `RES.ok` で応答にする（出力は接頭辞にかかわらず常に `Value`）。`SHIORI/` で始まる文字列なら応答全体として包まずに返し、それ以外の文字列なら `RES.ok` で包み、それ以外なら 204 を返す。コルーチンの扱いは [イベントからシーンへ](execution-model.md#イベントからシーンへ) で扱う。
 
 既定ハンドラの中身は次のとおりである。
 
 | ハンドラ | 動作 |
 | -------- | ---- |
 | `REG.OnBoot` | `SCENE.co_exec(act, act.req.id)`。シーン関数フォールバックと同じ |
-| `REG.OnChoiceSelectEx` | まず `SCENE.co_exec(act, "OnChoiceSelectEx")`。無ければ `act.req.reference[0]`（選択 ID）を `SCENE.search(選択 ID, STORE.last_global_scene)` で探し、見つかった関数をコルーチンに包んで返す。`SCENE.co_exec` は親のグローバルシーンを渡せないため、検索を直接呼ぶ |
-| `REG.OnSecondChange` | `CALLBACK.sweep(os.time())` が応答を返せばそれを返し、そうでなければ `virtual_dispatcher.dispatch(act)` の結果（コルーチンか `nil`）を返す |
+| `REG.OnChoiceSelectEx` | まず `SCENE.co_exec(act, "OnChoiceSelectEx")`。無ければ探索範囲の親を決める。`act.req.reference[2]`（`\q` の 3 番目の引数。選択肢を出したグローバルシーンの登録名）が文字列で `SCENE.get_global_table` で引けるグローバルシーンならそれを、そうでなければ `STORE.last_global_scene` を親にする。`act.req.reference[1]`（選択 ID）を `SCENE.search(選択 ID, 親)` で探し、無ければ `SCENE.search(選択 ID, nil)` でグローバルシーンを探し、見つかった関数をコルーチンに包んで返す。`SCENE.co_exec` は親のグローバルシーンを渡せないため、検索を直接呼ぶ |
+| `REG.OnSecondChange` | `CALLBACK.sweep(os.time())` が応答を返せばそれを返し（その回は仮想イベントを出さない）、そうでなければ `virtual_dispatcher.dispatch(act)` の結果（コルーチンか `nil`）を返す。`sweep` の応答は、期限切れの待機を再開した結果（出力の 200、または理由付きタイムアウトの 500）の全文であり、`EVENT.fire` が包まずに返す |
 
 ### 非同期トーク
 
@@ -289,13 +333,16 @@ SHIORI はベースウェアが問い合わせるだけの通信であり、シ�
     応答の Value に \![get,property,OnPastaCallBack{N},名前…] を載せて中断
 リクエスト 2（SSP が発行する OnPastaCallBack{N}。値は Reference に入る）
   EVENT.fire → CALLBACK.try_route
-    待っているコルーチンを Reference の配列で再開し、その出力を応答にする
-期限切れ
+    待っているコルーチンを pending から外し、EVENT.drive で Reference の配列を渡して再開し、
+    その出力を応答にする
+期限切れ（OnSecondChange のたびに確認）
   OnSecondChange の既定ハンドラ → CALLBACK.sweep
+    期限切れの待機を集めて pending から外し、番号順に EVENT.drive で (nil, 理由) を渡して再開する
+    最初に生まれた応答（出力の 200、または理由付きタイムアウトの 500）をその回の応答にする
 ```
 
 - アクターランタイムの上では、リクエスト 1 と 2 は別々の mailbox のメッセージとして順に処理される。待っているコルーチンは、その間 VM の `CALLBACK.pending` に保たれる。Rust 側はコルーチンを持たない。
-- 待ち合わせの状態の遷移（`consume_staged`・`STORE.co_callback`・`set_co_scene` との関係）は [コールバック待ちとの関係](execution-model.md#コールバック待ちとの関係) で扱う。利用者から見た挙動は [OnPastaCallBack](../lua/shiori-events.md#onpastacallbackコールバック応答) が正である。
+- 再開したシーンは、通常のイベントと同じ再開の手順（`EVENT.drive`）を通る。待ち合わせの状態の遷移（`consume_staged`・`STORE.co_callback`・`set_co_scene` との関係）は [コールバック待ちとの関係](execution-model.md#コールバック待ちとの関係) で、掃引の手順は [期限切れの掃引](execution-model.md#期限切れの掃引callbacksweep) で扱う。利用者から見た挙動は [OnPastaCallBack](../lua/shiori-events.md#onpastacallbackコールバック応答) が正である。
 
 ### 仮想イベントディスパッチャ（OnTalk・OnHour）
 
@@ -319,7 +366,7 @@ dispatch(act)
 - 次のトーク時刻は「現在時刻 + `math.random(最小間隔, 最大間隔)`」で決める。間隔は、決めるたびにローカル関数 `get_config` が `pasta.save` と `@pasta_config` を読み直して求める（キャッシュしない）。`hour_margin` は `[ghost].hour_margin`（無ければ 30）を、切り捨てや下限の補正をせずにそのまま使う。`[ghost]` の既定値の補完は [設定読込](loader.md#設定読込) で扱う。
 - ブロック中（3 で終わる間）は `check_hour`・`check_talk` を呼ばないため、`next_hour_unix`・`next_talk_time` は進まない。そのため、ブロックが解けた最初の判定で、過ぎていた正時やトーク時刻の条件が成り立つ。
 - 返したコルーチンは `EVENT.fire` が再開し、`set_co_scene` が `STORE.co_scene` を置き換える。OnHour とキックのシーンが中断中の継続を置き換え、OnTalk だけが継続を再開する（`check_talk` が `STORE.co_scene` を返す）のはこのためである（[継続トークと co_scene の更新](execution-model.md#継続トークチェイントークと-co_scene-の更新)）。
-- 仮想イベントは `REG` を通らない。発行するシーンはどれも `SCENE.co_exec` で探す（テスト用の差し替え `scene_executor` が設定されていればそれを使う）。
+- 仮想イベントは `REG` を通らない。OnHour・OnTalk で発行するシーンはどれも `SCENE.co_exec` で探す（テスト用の差し替え `scene_executor` が設定されていればそれを使う）。4 のキックは検索を使わず、シーン表のキーとの完全一致でシーンを引く（[キックの保留と起動](debug.md#キックの保留と起動kicklua)）。
 
 ### 応答文字列の出どころ
 
@@ -396,6 +443,7 @@ dispatch(act)
 - 各 FFI 入口は `catch_unwind` で panic をホストへ伝えない。ただしリリースでは `panic = "abort"` のため、正常な経路では panic を起こさない書き方をする（`crates/pasta_shiori/src/actor/marshaling.rs` の正常経路に `unwrap`・`expect` が無いことをテストが確かめる。リクエストの解析は再帰しない）。
 - `DllMain` ではスレッドを起こさない。アクタースレッドは `load` を起点に起こす。
 - 終了処理は何度呼んでも安全である（`unload` の二重呼び出し、`unload` と `DllMain` の detach の重なり）。スレッドは join せず detach する。完了の通知は VM の破棄と mailbox の受信側の破棄が済んでから送る。
+- ロガーの登録を外すのは、ランタイムを手放す処理（`release_runtime`）の最後である。完了の通知の後に出たログは捨てる。
 - `default_204` のバイト列は `RES.no_content()` と同じであり、FFI 入口の応答のバイト列はテスト `crates/pasta_shiori/tests/byte_invariant_test.rs` が固定している。再読み込みを繰り返しても OS のハンドルが増えないことは `crates/pasta_shiori/tests/actor_reload_leak_test.rs` が確かめる。
 - 仮想イベントディスパッチャの状態は保存されず、再読み込みのたびに初めからになる。
 - 静的 CRT の設定は、ワークスペースのルートから実行したビルドにだけ効く（ルートの `.cargo/config.toml`）。
@@ -431,8 +479,10 @@ dispatch(act)
 - [pasta-actor-feasibility](https://github.com/ekicyou/pasta/tree/main/.kiro/specs/completed/pasta-actor-feasibility)・[pasta-actor-runtime](https://github.com/ekicyou/pasta/tree/main/.kiro/specs/completed/pasta-actor-runtime) — アクターランタイム、presentation マーカーとレンダラ注入
 - [lua-require-robustness](https://github.com/ekicyou/pasta/tree/main/.kiro/specs/completed/lua-require-robustness) — `loadu`、処理のエラーを 500 応答で返す契約
 - [pasta-scene-kick](https://github.com/ekicyou/pasta/tree/main/.kiro/specs/completed/pasta-scene-kick) — `ActorMsg::Kick` と `SHIORI.kick`
+- [pasta-toml-logging-consistency](https://github.com/ekicyou/pasta/tree/main/.kiro/specs/completed/pasta-toml-logging-consistency) — ランタイムの解放を `release_runtime` にまとめ、ロガーの登録解除を最後にする
 
 ---
 
-呼ばれたら応える、ただそれだけのことに、これほどの備えが要りますのよ。おほほ、頼もしいでしょう？
-次は、応答の中身――トーク出力とアピアランスへ参りましょう！
+> 【お辞儀】呼ばれたら応える――ただそれだけのことに、これほどの備えを欠かさない SHIORI 層には、頭が下がりますわ。次は、応答の中身、トーク出力とアピアランスへ参りましょう。
+
+> 【アンソニー】NOTIFY にはすぐ 204 を返しても、片付くまで次の GET はお待たせする――律儀さも筋金入りでございます。

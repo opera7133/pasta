@@ -13,7 +13,7 @@
 use crate::common::create_empty_context;
 use pasta_lua::context::TranspileContext;
 use pasta_lua::loader::{LoaderContext, TranspileResult};
-use pasta_lua::{PastaLuaRuntime, RuntimeConfig};
+use pasta_lua::{ConfigError, PastaLuaRuntime, RuntimeConfig};
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -157,6 +157,27 @@ fn test_with_config_unknown_library_fails_with_name() {
     );
 }
 
+/// `std_package` を欠いた構成は、VM を作らずに名前付きの構成エラーになる（3.1、7.2）。
+#[test]
+fn test_with_config_missing_std_package_fails_with_name() {
+    for libs in [vec!["std_string"], vec!["std_all", "-std_package"]] {
+        let config = RuntimeConfig::from_libs(libs.iter().map(|s| s.to_string()).collect());
+        let err = match PastaLuaRuntime::with_config(create_empty_context(), config) {
+            Ok(_) => panic!("with_config should fail without std_package: {libs:?}"),
+            Err(e) => e,
+        };
+        let config_err = match &err {
+            pasta_lua::mlua::Error::ExternalError(e) => e.downcast_ref::<ConfigError>(),
+            _ => None,
+        };
+        assert!(
+            matches!(config_err, Some(ConfigError::MissingRequiredLibrary(name)) if name == "std_package"),
+            "{libs:?}: expected MissingRequiredLibrary(std_package), got {err:?}"
+        );
+        assert!(err.to_string().contains("std_package"), "{libs:?}: {err}");
+    }
+}
+
 // ============================================================================
 // runtime accessors (ad-hoc construction contract)
 // ============================================================================
@@ -176,6 +197,26 @@ fn test_lua_accessor_shares_vm_state_with_exec() {
 
     let value = runtime.exec("return CELL316_SHARED").unwrap();
     assert_eq!(value.as_i64(), Some(7));
+}
+
+/// VM ごとに乱数の種が与えられ、2 つのランタイムの math.random の列が一致しない。
+#[test]
+fn test_math_random_sequence_differs_between_runtimes() {
+    let script = "local t = {} for i = 1, 8 do t[i] = math.random(1, 1000000) end \
+                  return table.concat(t, ',')";
+    let a = PastaLuaRuntime::new(create_empty_context()).unwrap();
+    let b = PastaLuaRuntime::new(create_empty_context()).unwrap();
+    let seq_a = a.exec(script).unwrap().to_string().unwrap();
+    let seq_b = b.exec(script).unwrap().to_string().unwrap();
+    assert_ne!(seq_a, seq_b, "math.random sequences must differ per VM");
+}
+
+/// math を読み込まない構成でも VM を作れる（種の設定は math がある時だけ）。
+#[test]
+fn test_runtime_without_math_library_still_builds() {
+    let config = RuntimeConfig::from_libs(vec!["std_all".into(), "-std_math".into()]);
+    let runtime = PastaLuaRuntime::with_config(create_empty_context(), config).unwrap();
+    assert!(runtime.exec("return math").unwrap().is_nil());
 }
 
 // ============================================================================

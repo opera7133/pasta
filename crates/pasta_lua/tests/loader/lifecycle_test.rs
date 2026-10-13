@@ -38,6 +38,12 @@ fn test_cache_incremental_update() {
     // Write current version to .cache_version (otherwise it will be cleared)
     let version = env!("CARGO_PKG_VERSION");
     std::fs::write(cache_dir.join(".cache_version"), version).unwrap();
+    // Write the default scene alias table fingerprint too (otherwise it will be cleared)
+    std::fs::write(
+        cache_dir.join(".scene_alias"),
+        pasta_core::SceneAliasTable::builtin_default().fingerprint(),
+    )
+    .unwrap();
 
     // Create pasta/scene subdirectory for cache files
     std::fs::create_dir_all(cache_dir.join("pasta/scene")).unwrap();
@@ -336,6 +342,12 @@ fn test_scene_dic_old_path_cleanup() {
     // Write current version to avoid cache clear
     let version = env!("CARGO_PKG_VERSION");
     std::fs::write(cache_dir.join(".cache_version"), version).unwrap();
+    // Write the default scene alias table fingerprint too (otherwise it will be cleared)
+    std::fs::write(
+        cache_dir.join(".scene_alias"),
+        pasta_core::SceneAliasTable::builtin_default().fingerprint(),
+    )
+    .unwrap();
 
     // Create old scene_dic.lua at deprecated path
     std::fs::write(
@@ -359,5 +371,30 @@ fn test_scene_dic_old_path_cleanup() {
     assert!(
         new_path.exists(),
         "scene_dic.lua should exist at new path cache/lua/pasta/scene_dic.lua"
+    );
+}
+
+#[test]
+fn test_scene_module_with_dot_in_file_name() {
+    // `require` maps every `.` in a module name to a path separator, so a `.` in the
+    // file stem must not survive into the module name (`dic/v1.2.pasta` → `v1_2`).
+    let temp = create_temp_with_pasta("＊テスト\n  ゴースト：「こんにちは」\n");
+    let base_dir = temp.path();
+    std::fs::write(
+        base_dir.join("dic/v1.2.pasta"),
+        "＊版数\n  ゴースト：「v1.2」\n",
+    )
+    .unwrap();
+
+    let runtime = PastaLoader::load(base_dir).unwrap();
+
+    let result = runtime
+        .exec(r#"return package.loaded["pasta.scene.v1_2"] ~= nil"#)
+        .unwrap();
+    assert_eq!(result.as_boolean(), Some(true));
+    assert!(
+        base_dir
+            .join("profile/pasta/cache/lua/pasta/scene/v1_2.lua")
+            .exists()
     );
 }

@@ -60,7 +60,10 @@ fn test_no_sink_is_byte_identical_and_records_nothing() {
     let with_seam = String::from_utf8(output).unwrap();
 
     // Baseline: the exact bytes the generator has always produced for a talk action.
-    assert_eq!(with_seam, "act.さくら:talk(\"こんにちは\")\n");
+    assert_eq!(
+        with_seam,
+        "act:actor_proxy(\"さくら\"):talk(\"こんにちは\")\n"
+    );
 }
 
 #[test]
@@ -82,7 +85,7 @@ fn test_capturing_sink_records_line_to_span_for_action_path() {
 
     // Output bytes are unchanged by the presence of the sink.
     let lua = String::from_utf8(output).unwrap();
-    assert_eq!(lua, "act.さくら:talk(\"こんにちは\")\n");
+    assert_eq!(lua, "act:actor_proxy(\"さくら\"):talk(\"こんにちは\")\n");
 
     // The seam recorded exactly the line that was emitted for this action,
     // mapped back to the originating `.pasta` span.
@@ -156,6 +159,40 @@ fn test_out_line_counter_matches_emitted_line_count() {
     assert_eq!(emitted, 4, "actual emitted lines should match out_line");
 }
 
+/// A line containing concatenation maps back to its own `.pasta` line, the same
+/// way a line containing arithmetic does (string-concat-operator Req 6.5).
+#[test]
+fn test_concat_line_maps_to_its_pasta_line_like_arith() {
+    use pasta_dsl::parser::parse_str;
+    use pasta_lua::LuaTranspiler;
+
+    // .pasta lines 2..=4: arithmetic, concatenation, dynamic call with concatenation.
+    let source = "＊メイン
+　＄x＝＄a＋1
+　＄y＝「合計」＆＄n＆「個」
+　＞＄種類＆「_挨拶」
+";
+    let file = parse_str(source, "test.pasta").expect("parse ok");
+    let mut sink = CapturingSink::default();
+    let mut output = Vec::new();
+    LuaTranspiler::default()
+        .transpile_with_sink(&file, &mut output, Some(&mut sink))
+        .expect("transpile ok");
+    let lua = String::from_utf8(output).unwrap();
+    let lua_lines: Vec<&str> = lua.lines().collect();
+
+    let pasta_line_of = |needle: &str| -> Vec<usize> {
+        sink.records
+            .iter()
+            .filter(|(lua_line, _)| lua_lines[*lua_line as usize - 1].contains(needle))
+            .map(|(_, span)| span.start_line)
+            .collect()
+    };
+    assert_eq!(pasta_line_of("var.x = (PASTA.num("), vec![2]);
+    assert_eq!(pasta_line_of("var.y = ((\"合計\" .. PASTA.str("), vec![3]);
+    assert_eq!(pasta_line_of("act:call("), vec![4]);
+}
+
 /// Task 8.2 — ゼロコスト/サンドボックス **集約回帰ゲート（バイト一致サブ）**。
 ///
 /// このモジュールは「本番 transpile（sink 非装着）出力のバイト不変」を **一箇所に集約** し、
@@ -163,7 +200,7 @@ fn test_out_line_counter_matches_emitted_line_count() {
 /// 条件は `tests/runtime/debug_integration_test.rs` の同名モジュールが受け持つ（ランタイム
 /// アクセスが要るため分割。本モジュールは code_gen 本番 API に届く transpiler ターゲット側）。
 ///
-/// 要件マッピング（`.kiro/specs/pasta-vscode-lua-debug/requirements.md`）:
+/// 要件マッピング（`.kiro/specs/completed/pasta-vscode-lua-debug/requirements.md`）:
 /// - **R4.6**: スライス無効時、実証スライスのコード経路を本番動作へ露出せず追加コストを与えない。
 ///   → 本番 transpile（sink=None）は出力にゼロバイトも追加しない。
 /// - **R5.2**: 無効時、本番実行の挙動に追加コストを与えない（出力バイト一致＝回帰なし）。
@@ -239,8 +276,8 @@ do
         local args = { ... }
         local save, var = act:init_scene(SCENE)
 
-        act.さくら:talk(\"「こんにちは」\")
-        act.うにゅう:talk(\"「やあ」\")
+        act:actor_proxy(\"さくら\"):talk(\"「こんにちは」\")
+        act:actor_proxy(\"うにゅう\"):talk(\"「やあ」\")
     end
 end
 ";

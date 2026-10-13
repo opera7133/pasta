@@ -27,8 +27,6 @@ transpiled_output_dir = "profile/pasta/cache/lua"
 [logging]
 # ログファイルパス（load_dir からの相対パス）
 file_path = "profile/pasta/logs/pasta.log"
-# ログローテーション日数
-rotation_days = 7
 # デフォルトログレベル（error/warn/info/debug/trace）
 level = "debug"
 # EnvFilter ディレクティブ（設定時は level より優先）
@@ -37,8 +35,8 @@ level = "debug"
 
 [ghost]
 # ランダムトーク発生間隔（秒）
-talk_interval_min = 180  # 最小トーク間隔（デフォルト: 180）
-talk_interval_max = 300  # 最大トーク間隔（デフォルト: 300）
+talk_interval_min = 45   # 最小トーク間隔（デフォルト: 180）
+talk_interval_max = 75   # 最大トーク間隔（デフォルト: 300）
 # hour_margin = 30       # OnHour 誤差許容秒数（デフォルト: 30）
 
 [talk]

@@ -72,7 +72,7 @@ const LOOP_VISITS: usize = 3;
 
 /// `require "pasta"` / `require "pasta.global"` を満たし、`SCENE.__start__` を実行可能に
 /// する最小シム。`create_scene` は素のテーブルを返し、`act` スタブは `init_scene` /
-/// `expr_fn` / `さくら:talk` を no-op で提供する（`.pasta`↔`.lua` 変換とは無関係の純粋な
+/// `actor_proxy` / `expr_fn` / `talk` を no-op で提供する（`.pasta`↔`.lua` 変換とは無関係の純粋な
 /// 実行足場であり、BP/coalescing は実セッションが担う）。
 const PASTA_SHIM: &str = "\
 local PASTA = {}
@@ -93,6 +93,7 @@ __index = function(_t, _k)
 end,
 })
 function ACT.init_scene(_self, _scene) return {}, {} end
+function ACT.actor_proxy(_self, _name) return setmetatable({}, actor) end
 ";
 
 /// 実 TCP ソケット越しの最小 DAP クライアント（[`super::tests::DapClient`] と同型）。
@@ -203,6 +204,7 @@ fn build_fixture() -> Fixture {
         std::slice::from_ref(&pasta_file),
         &cache_manager,
         false,
+        &LuaTranspiler::default(),
     );
 
     // チャンク名キー = ローダ由来 `source_to_cache_path`（map のキーと同一）。

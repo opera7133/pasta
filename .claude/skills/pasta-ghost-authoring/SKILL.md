@@ -14,7 +14,7 @@ description: >-
   SHIORIプロトコル実装, Luaランタイム開発, pasta言語仕様の設計変更.
 metadata:
   author: ekicyou
-  version: "1.7.1"
+  version: "1.8.0"
 ---
 
 # Pasta Ghost Authoring Skill
@@ -73,7 +73,7 @@ metadata:
 | 変数             | `＄`   | `$`  | 変数代入・参照                       | `＄count＝1` / `＄％prop＝「値」`                                         | [variables.md](references/variables.md)                             |
 | 代入             | `＝`   | `=`  | 変数代入の区切り（`：` では代入不可） | `＄count＝1`                                                              | [variables.md](references/variables.md#変数の種類とスコープ)         |
 | Call             | `＞`   | `>`  | シーン呼び出し                       | `＞次の会話`                                                              | [call-jump.md](references/call-jump.md)                             |
-| 属性             | `＆`   | `&`  | メタデータ（処理には反映されない）   | `＆author：Alice`                                                         | [block-structure.md](references/block-structure.md#属性)             |
+| 属性             | `＆`   | `&`  | メタデータ（処理には反映されない）。式の中では連結演算子 | `＆author：Alice`                                                         | [block-structure.md](references/block-structure.md#属性)・[markers.md](references/markers.md#属性マーカーと連結演算子) |
 | コメント         | `＃`   | `#`  | コメント行                           | `＃ メモ`                                                                 | [block-structure.md](references/block-structure.md#コメント)         |
 | アクター辞書     | `％`   | `%`  | アクター辞書定義・アクター指定行     | `％さくら`                                                                | [actor-dictionary.md](references/actor-dictionary.md)               |
 | キューコマンド   | `！`   | `!`  | 演出指示（`select` だけが有効）      | `！select(30)`                                                            | [block-structure.md](references/block-structure.md#キューコマンド行) |
@@ -123,7 +123,7 @@ metadata:
 
 1. **空白区切り** — `＠単語名　テキスト` で単語参照と通常テキストを分離。空白はトークン区切りとして消費され出力に含まれない（空白数は無関係）
 2. **最長一致（空白なし）** — `＠天気ですね` は「天気ですね」全体が識別子として吸収される
-3. **＠＠エスケープ** — リテラルの「＠」を出力するには `＠＠` と記述（「＄」は `＄＄`）
+3. **エスケープ** — リテラルの「＠」を出力するには `＠＠` と記述（「＄」は `＄＄`）。`\\` は「\」を 1 文字表示する（`C:\\new` は「C:\new」と表示され、`\n` の改行にはならない）
 
 ```
 ❌ ＠地名からおらんようなってもた
@@ -155,6 +155,7 @@ metadata:
 - 参照時 `＠単語名` で値リストからシャッフル＆順次消費方式で1つ選択される（詳細は [words.md](references/words.md#シャッフル順次消費)）
 - スコープ解決: ローカル → グローバルの順に前方一致検索。ローカル単語に候補があればそれだけを使い、グローバル単語の候補とは合わせない
 - 単語定義の行末にコメントを書けるのは、値を `「」` または `"` で囲んだときだけ。引用なしの値の単語定義にコメントを付けるときは別の行に書く（[block-structure.md](references/block-structure.md#コメント)）
+- `「」`・`""` は空文字列の候補になる。引用は開始した行の中で閉じる（行をまたぐとパースエラー）。引用なしの値は `「`・`"` で始められない（[literals.md](references/literals.md)）
 
 ```pasta
 ＠挨拶：こんにちは、おはよう、やあ
@@ -173,7 +174,9 @@ metadata:
 - **グローバル変数** `＄＊変数名`: Lua の `save` テーブルに入り、ゴーストを終了しても JSON ファイルに保存されて次の起動時に戻る
 - **プロパティ変数** `＄％prop.path`: SSP共有プロパティの読み書き。SET（`＄％prop＝「値」`）、GET代入（`＄var＝＄％prop`）、インラインGET（`アクター：＄％prop`）が可能
 - 代入: `＄変数名＝値`（代入は `＝` のみ。`＄変数名：値` はパースエラー）。値にはリテラル値・単語参照・変数参照・式・関数呼び出しが使用可能
-- **グローバル関数代入**: `＄result＝＠＊func()` → `GLOBAL.func(act)` の戻り値を代入
+- **グローバル関数代入**: `＄result＝＠＊func()` → `GLOBAL` テーブルの関数 `func` の戻り値を代入（生成コードは `act:global_fn("func")`。関数が無いときはエラーにならず、警告ログを出して値なし）
+- **算術**: `＋` `－` `＊` `／` `％` はすべて数値の演算（文字列の連結にはならない）。値の無い被演算子（未代入の変数・値を返さない関数など）は 0 とみなし、ログは出ない（`＄＊回数＝＄＊回数＋１` は初回から 1）。数字でない文字列・真偽値など変換できない値は警告ログを出して 0 とみなす。演算の結果は必ず数値で、値なしにはならない（詳細は [variables.md](references/variables.md#算術の評価)）
+- **連結**: `＆` は左右の被演算子を文字列にしてつなぐ（`＄表示＝「合計」＆＄n＆「個」`）。算術より後に計算される。式の中（代入の右辺・式文・関数呼び出しの引数・Call の引数・動的ターゲット）だけで連結になり、台詞に書いた `＆` は文字のまま出力される。値の無い被演算子は空文字列とみなし、ログは出ない。真偽値など変換できない値は警告ログを出して空文字列とみなす。結果は必ず文字列（詳細は [variables.md](references/variables.md#連結の評価)）
 - **式文（副作用のみ）**: `＄＝expr` — 戻り値を使わず式を実行するだけ
 - 参照: アクション行内で `＄変数名` と記述
 
@@ -181,6 +184,7 @@ metadata:
 ＊会話
   ＄count＝1
   ＄＊total＝＄＊total＋1
+  ＄label＝「合計」＆＄＊total   ＃ 文字列の連結
   ＄result＝＠＊globalFunc()     ＃ グローバル関数の戻り値を代入
   ＄＝＠＊logEvent（「起動」）   ＃ 戻り値不要の式文
   ＄％sakura.name＝「Alice」     ＃ SSP共有プロパティに書き込み
@@ -195,8 +199,9 @@ metadata:
 
 ### 3.5 Call Statements（Call文）
 
-- 構文: `＞シーン名` — 指定シーンを呼び出し、実行後に復帰
-- 動的ターゲット: `＞式` — 式（`＞＄変数名`・`＞＠関数（）`・`＞「文字列」` など）の評価結果を文字列にしてシーン名として解決
+- 構文: `＞シーン名` — 指定シーンを呼び出し、実行後に復帰。戻った後の行は、別のグローバルシーンを呼んだ後でも呼び出し元のグローバルシーンで名前を解決する（詳細は [call-jump.md](references/call-jump.md#call-から戻った後の名前解決)）
+- 動的ターゲット: `＞式` — 式（`＞＄変数名`・`＞＠関数（）`・`＞「文字列」` など）の値を検索キーにしてシーン名として解決（文字列はそのまま、数値は文字列にする。値なし・空文字列・真偽値などは呼ばない）
+- Call の失敗: 見つからない・動的ターゲットの値が検索キーにならないときは、警告ログを出し、Call 行の位置に失敗表記（`【Call失敗：「名前」が見つからない】` など）を出力して次の行へ進む（詳細は [call-jump.md](references/call-jump.md#call-が失敗したとき)）
 - 前方一致で候補が複数ある場合はシャッフル＆順次消費で1つ選ぶ
 - 特殊Call: `＞ゴースト終了（ミリ秒）` — ゴーストを終了させる
 - 特殊Call: `＞チェイントーク` / `＞yield` — シーン出力を分割し、次回 OnTalk の機会に残りを出力する（詳細は [call-jump.md](references/call-jump.md#チェイントーク)、作例は [authoring-patterns.md §6.7](references/authoring-patterns.md#s6-7)）
@@ -309,7 +314,7 @@ end
 `!select(秒数)` キューコマンドで選択の制限時間を設定する。
 
 #### 自動ルーティング
-選択後は既定の `OnChoiceSelectEx` イベントハンドラが、選択 ID と前方一致するローカルシーンを、直前に実行したグローバルシーン（通常は選択肢を出したシーン）の配下から探して自動実行する。`＊OnChoiceSelectEx` という名前のシーンがあれば、そちらが優先される。詳細はマニュアルの [OnChoiceSelectEx](https://ekicyou.github.io/pasta/lua/shiori-events.html#onchoiceselectex) を参照。
+選択後は既定の `OnChoiceSelectEx` イベントハンドラが、選択 ID と前方一致するローカルシーンを、その選択肢行を出したグローバルシーンの配下から探して自動実行する（Call で呼んだ別のグローバルシーンが出した選択肢はそのシーン、戻った後に出した選択肢は呼び出し元のシーン）。ローカルシーンが無ければ、選択 ID と前方一致するグローバルシーンを探す。`＊OnChoiceSelectEx` という名前のシーンがあれば、そちらが優先される。詳細はマニュアルの [OnChoiceSelectEx](https://ekicyou.github.io/pasta/lua/shiori-events.html#onchoiceselectex) を参照。
 
 #### 使用例
 ```pasta
@@ -352,7 +357,6 @@ end
 | `[persistence]`  | 保存ファイルの形式・場所                               | ★                    |
 | `[logging]`      | ログ出力の設定                                         | ★                    |
 | `[debug]`        | デバッグバックエンド（上級者向け）                     | ★                    |
-| `[lua]`          | Lua ライブラリ（上級者向け。通常は書かない）           | ★                    |
 | `[package]`      | エンジンプロファイル専用（SHIORI では不要・書いても無視） | —                 |
 
 > 📖 全セクション・全キーの詳細: [references/pasta-toml.md](references/pasta-toml.md)

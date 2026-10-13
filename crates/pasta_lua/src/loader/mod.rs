@@ -33,15 +33,18 @@ mod source_map_build;
 
 pub use cache::{CURRENT_VERSION, CacheManager};
 pub use config::{
-    DebugFileConfig, GhostConfig, LoaderConfig, LoggingConfig, LuaConfig, PastaConfig,
-    PersistenceConfig, TalkConfig, default_debug_port, default_hour_margin, default_libs,
-    default_log_file_path, default_lua_search_paths, default_spot_newlines,
-    default_talk_interval_max, default_talk_interval_min,
+    DebugFileConfig, GhostConfig, LoaderConfig, LoggingConfig, PastaConfig, PersistenceConfig,
+    SceneAliasSource, TalkConfig, default_debug_port, default_hour_margin, default_log_file_path,
+    default_lua_search_paths, default_spot_newlines, default_talk_interval_max,
+    default_talk_interval_min,
 };
 pub use context::LoaderContext;
 pub use error::{LoaderError, TranspileFailure};
 
+use crate::config::TranspilerConfig;
+pub use crate::runtime::default_libs;
 use crate::runtime::{PastaLuaRuntime, RuntimeConfig};
+use crate::transpiler::LuaTranspiler;
 
 use std::fs;
 use std::path::Path;
@@ -83,6 +86,8 @@ impl PastaLoader {
     /// # Arguments
     /// * `base_dir` - Startup directory path
     /// * `runtime_config` - Custom runtime configuration
+    ///   (`scene_aliases` is always replaced by the table read from pasta.toml,
+    ///   so that declarations and searches use the same alias table)
     ///
     /// # Returns
     /// * `Ok(PastaLuaRuntime)` - Initialized runtime
@@ -98,6 +103,10 @@ impl PastaLoader {
             return Err(LoaderError::DirectoryNotFound(base_dir.to_path_buf()));
         }
 
+        // Route this thread's logs to this ghost's logger until the load returns,
+        // even when several ghosts are loaded in one process (nests under SHIORI's guard).
+        let _log_guard = crate::logging::LoadDirGuard::new(base_dir.to_path_buf());
+
         info!(path = %base_dir.display(), "Starting pasta loader");
 
         // Phase 1: Load configuration
@@ -107,13 +116,18 @@ impl PastaLoader {
         // Stage 1.5: Create logger with config and update tracing filter
         debug!("Stage 1.5: Applying logging configuration");
         let logger = Self::create_and_register_logger(base_dir, &config)?;
+        info!(
+            source = ?config.scene_alias_source,
+            table = %config.scene_aliases,
+            "Scene alias table"
+        );
 
         // Phase 2: Prepare directories and cache (with version check)
         debug!("Phase 2: Preparing directories and cache");
         Self::prepare_directories(base_dir, &config.loader)?;
         let cache_manager =
             CacheManager::new(base_dir.to_path_buf(), &config.loader.transpiled_output_dir);
-        cache_manager.prepare_cache_dir()?;
+        cache_manager.prepare_cache_dir(&config.scene_aliases.fingerprint())?;
 
         // Phase 2.5: Self-deploy framework scripts (non-fatal)
         // base_dir is finalized by Phase 2; sync the embedded canonical pasta_scripts
@@ -136,7 +150,7 @@ impl PastaLoader {
         // Phase 3: Discover files
         debug!("Phase 3: Discovering pasta and lua files");
         let (pasta_files, lua_files) =
-            Self::discover_all_files(base_dir, &config.loader.pasta_patterns)?;
+            Self::discover_all_files(base_dir, &config.loader.pasta_patterns, &cache_manager)?;
         let total_files = pasta_files.len() + lua_files.len();
         if total_files == 0 {
             warn!(path = %base_dir.display(), "No .pasta or .lua files found");
@@ -150,8 +164,11 @@ impl PastaLoader {
 
         // Phase 4: Incremental process (transpile .pasta, copy .lua)
         debug!("Phase 4: Incremental processing");
+        // One transpiler shared by Phase 4 and Phase 5.5 so the declared scene
+        // names (and debug join keys) always use the same alias table (6.2).
+        let transpiler = Self::transpiler_for(&config);
         let (context, module_names, stats) =
-            Self::process_incremental(&pasta_files, &lua_files, &cache_manager)?;
+            Self::process_incremental(&pasta_files, &lua_files, &cache_manager, &transpiler)?;
 
         // Log statistics in debug mode
         if config.loader.debug_mode {
@@ -203,6 +220,7 @@ impl PastaLoader {
                 &pasta_files,
                 &cache_manager,
                 resolved_debug.source_map_sidecar,
+                &transpiler,
             );
             debug!("Phase 5.5: Built source map for debug session");
             Some(map)
@@ -213,6 +231,8 @@ impl PastaLoader {
         // Phase 6: Initialize runtime and load scene_dic
         debug!("Phase 6: Initializing runtime");
         let loader_context = LoaderContext::from_config(base_dir, &config);
+        // Search side gets the same table as the declaration side (6.2).
+        let runtime_config = runtime_config.with_scene_aliases(config.scene_aliases.clone());
         let runtime = PastaLuaRuntime::from_loader_with_scene_dic(
             context,
             loader_context,
@@ -227,6 +247,13 @@ impl PastaLoader {
         Ok(runtime)
     }
 
+    /// Build the transpiler that declares global scenes with this config's alias table.
+    fn transpiler_for(config: &PastaConfig) -> LuaTranspiler {
+        LuaTranspiler::new(
+            TranspilerConfig::default().with_scene_aliases(config.scene_aliases.clone()),
+        )
+    }
+
     /// Create an instance-specific logger, register it with the global registry,
     /// and update the tracing filter with config from pasta.toml.
     ///
@@ -235,30 +262,42 @@ impl PastaLoader {
         base_dir: &Path,
         config: &PastaConfig,
     ) -> Result<Option<std::sync::Arc<crate::logging::PastaLogger>>, LoaderError> {
-        let logging_config = config.logging();
+        let logging_config = config.logging().unwrap_or_default();
 
-        match crate::logging::PastaLogger::new(base_dir, logging_config.as_ref()) {
+        // Always update the tracing filter: a reload without `[logging]` resets it
+        // to the default, and a logger creation failure still applies level/filter.
+        crate::logging::update_tracing_filter(&logging_config);
+
+        let registry = crate::logging::GlobalLoggerRegistry::instance();
+        let logger = match crate::logging::PastaLogger::new(base_dir, Some(&logging_config)) {
             Ok(logger) => {
                 let logger = std::sync::Arc::new(logger);
                 info!(path = %logger.log_path().display(), "Created instance logger");
-
-                // Register with global registry (overwrites Stage 1 default writer)
-                crate::logging::GlobalLoggerRegistry::instance()
-                    .register(base_dir.to_path_buf(), logger.clone());
-
-                // Update tracing filter with config
-                if let Some(ref cfg) = logging_config {
-                    crate::logging::update_tracing_filter(cfg);
-                }
-
-                Ok(Some(logger))
+                // Overwrites the Stage 1 default writer when loaded via SHIORI.
+                registry.register(base_dir.to_path_buf(), logger.clone());
+                logger
             }
             Err(e) => {
-                // Log warning but don't fail startup
-                warn!(error = %e, "Failed to create instance logger, logging disabled");
-                Ok(None)
+                // Whatever the reason, fall back to the default log file so no logs are lost.
+                let logger = match crate::logging::PastaLogger::new(base_dir, None) {
+                    Ok(logger) => std::sync::Arc::new(logger),
+                    Err(default_err) => {
+                        warn!(error = %default_err, "Failed to create instance logger, logging disabled");
+                        return Ok(None);
+                    }
+                };
+                // Register first so the warn lands in the default log file.
+                registry.register(base_dir.to_path_buf(), logger.clone());
+                warn!(
+                    file_path = %logging_config.file_path,
+                    fallback = %default_log_file_path(),
+                    error = %e,
+                    "Cannot use [logging] file_path; logging to the default log file instead"
+                );
+                logger
             }
-        }
+        };
+        Ok(Some(logger))
     }
 
     /// Prepare profile directories.

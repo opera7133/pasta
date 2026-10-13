@@ -35,6 +35,7 @@ mod searcher;
 
 pub use renderer_injection::{RendererInjection, SakuraRenderBoundary, default_sakura_renderer};
 pub use runtime_config::RuntimeConfig;
+pub use runtime_config::default_libs;
 pub use runtime_config::lua_require;
 pub use searcher::install_module_searcher;
 
@@ -43,7 +44,7 @@ use crate::debug::source_map::SourceMap;
 use crate::loader::PastaConfig;
 use crate::logging::PastaLogger;
 pub(crate) use finalize::register_finalize_scene;
-use mlua::{Lua, Result as LuaResult};
+use mlua::{Function, Lua, Result as LuaResult, Table};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -156,6 +157,11 @@ impl PastaLuaRuntime {
         // Validate configuration and emit warnings
         config.validate_and_warn();
 
+        // Required libraries must be present before any VM is built.
+        config
+            .ensure_libs()
+            .map_err(|e| mlua::Error::ExternalError(Arc::new(e)))?;
+
         // Convert libs array to StdLib flags
         let std_lib = config
             .to_stdlib()
@@ -173,12 +179,31 @@ impl PastaLuaRuntime {
         //     shared across threads.
         let lua = unsafe { Lua::unsafe_new_with(std_lib, mlua::LuaOptions::default()) };
 
+        // LuaJIT の乱数は固定の種で始まるため、起動ごとに同じ列になる。
+        // math がある構成でだけ、時刻とプロセス ID から種を与える。
+        if let Ok(math) = lua.globals().get::<Table>("math") {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            // f64 で誤差なく表せる 53 ビットに収める。
+            let seed = (nanos ^ u64::from(std::process::id())) & ((1u64 << 53) - 1);
+            math.get::<Function>("randomseed")?
+                .call::<()>(seed as f64)?;
+        }
+
         // Extract registries from context
         let scene_registry = context.scene_registry;
         let word_registry = context.word_registry;
 
-        // Register @pasta_search module
-        crate::search::register(&lua, scene_registry, word_registry)?;
+        // Register @pasta_search module (the same alias table is handed to the
+        // finalize_scene re-registration via `register_finalize_scene`)
+        crate::search::register(
+            &lua,
+            scene_registry,
+            word_registry,
+            config.scene_aliases.clone(),
+        )?;
 
         // Register mlua-stdlib modules based on configuration
         if config.should_enable_module("assertions") {

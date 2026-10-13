@@ -117,11 +117,11 @@ fn build_multibeat_kick_ghost_dir() -> (PathBuf, TempDir) {
     let toml = std::fs::read_to_string(&toml_path).expect("read pasta.toml");
     let toml = toml
         .replace(
-            "talk_interval_min = 180  # 最小トーク間隔（デフォルト: 180）",
+            "talk_interval_min = 45   # 最小トーク間隔（デフォルト: 180）",
             &format!("talk_interval_min = {TALK_INTERVAL_SECS}"),
         )
         .replace(
-            "talk_interval_max = 300  # 最大トーク間隔（デフォルト: 300）",
+            "talk_interval_max = 75   # 最大トーク間隔（デフォルト: 300）",
             &format!("talk_interval_max = {TALK_INTERVAL_SECS}"),
         );
     assert!(
@@ -193,7 +193,8 @@ fn kick_multibeat_scene_delivers_one_beat_per_tick_in_order_end_to_end() {
     // --- フェーズ 3: 実 sink（lifecycle::kick_sink）でマルチビートシーンをキック注入 ---
     let sink = pasta::actor::lifecycle::kick_sink();
     sink(KickRequest {
-        scene: KICK_SCENE.to_string(),
+        // キックはシーン表の登録名に完全一致で引く（作者名・`_`・通し番号 `1` が登録名）。
+        scene: format!("{KICK_SCENE}_1"),
     });
 
     // --- フェーズ 4: tick 1 — 初回ビートが割り込み配信される（talking でも kick_force 突破） ---

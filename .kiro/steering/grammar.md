@@ -22,7 +22,7 @@
 | グローバルシーン | `＊`   | `*`  | シーン定義                                                 |
 | ローカルシーン   | `・`   | `-`  | サブシーン定義                                             |
 | アクター辞書     | `％`   | `%`  | アクター辞書の定義・アクター指定行                         |
-| 属性             | `＆`   | `&`  | メタデータ（構文は受理されるが処理には反映されない）       |
+| 属性             | `＆`   | `&`  | メタデータ（構文は受理されるが処理には反映されない）。式の中では連結演算子（[属性マーカーと連結演算子](../../book/src/grammar/markers.md#属性マーカーと連結演算子)） |
 | 単語/関数        | `＠`   | `@`  | 単語定義・参照・関数呼び出し（`＠＄変数名` は変数の値による動的参照） |
 | 選択肢           | `＠？` | `@?` | 選択肢行（ジャンプ先＋表示テキスト）                       |
 | 変数             | `＄`   | `$`  | 変数の代入・参照                                           |
@@ -61,12 +61,12 @@
 | ---------------- | ------------------ | ---------------------------- |
 | `talk`           | `actor`, `text`    | `act:talk`（発言テキスト）   |
 | `sakura_script`  | `actor`, `text`    | `act:sakura_script`          |
-| `raw_script`     | `text`             | `act:raw_script`（アクター未指定の生スクリプト） |
+| `raw_script`     | `text`             | `act:raw_script`（アクター未指定の生スクリプト）・`act:failure`（失敗表記【…】。ウェイト・改行なし） |
 | `surface`        | `id`               | `act:surface`                |
 | `wait`           | `ms`               | `act:wait`                   |
 | `newline`        | `n`                | `act:newline`                |
 | `clear`          | （なし）           | `act:clear`                  |
-| `choice`         | `target`, `display`| `act:choice`（選択肢行）     |
+| `choice`         | `target`, `display`, `scope` | `act:choice`（選択肢行。`scope` は出した時点のグローバルシーン名で `\q` の第 3 引数になる） |
 | `choice_timeout` | `seconds`          | `act:choice_timeout`（`!select`） |
 | `spot`           | `actor`, `spot`    | `act:set_spot`（アクター指定行） |
 | `clear_spot`     | （なし）           | `act:clear_spot`（アクター指定行の先頭） |

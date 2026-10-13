@@ -36,9 +36,9 @@ crates/pasta_sample_ghost/
 ├── ghosts/                 # サンプルゴースト本体（SSOT・配布物）
 │   └── hello-pasta/        # ゴーストID
 │       ├── install.txt
-│       ├── ghost/master/   # descript.txt, pasta.toml, dic/*.pasta（手書きSSOT）＋ pasta.dll, scripts/（生成物）
+│       ├── ghost/master/   # descript.txt, pasta.toml, dic/*.pasta（手書きSSOT）＋ pasta.dll, THIRD_PARTY_LICENSES.txt, scripts/（生成物・コミットしない）
 │       └── shell/master/   # descript.txt（手書き）＋ surfaces.txt, surface*.png（生成物）
-├── release.ps1             # ビルド＋セットアップ＋.nar パッケージ作成
+├── release.ps1             # ビルド＋セットアップ＋.nar・pasta.dll.zip 作成（動作確認用）
 ├── build.rs                # ビルドスクリプト
 └── tests/
     ├── common/mod.rs                 # テストヘルパー
@@ -65,16 +65,19 @@ crates/pasta_sample_ghost/
 .\release.ps1 -SkipSetup
 ```
 
-このスクリプトは以下の 6 ステップを実行します:
+このスクリプトは以下の 7 ステップを実行します:
 
 1. `pasta_shiori` DLL（32bit Windows）をビルド
 2. ゴースト画像を生成（`cargo run` → surface*.png + surfaces.txt）
-3. `pasta.dll` と Lua ランタイム（`scripts/`）を `ghosts/hello-pasta/ghost/master/` に配置
-4. `pasta_check release` を実行（updates.txt / `.nar` パッケージ作成）
-5. バージョン整合チェック
-6. リリース手順の表示
+3. `pasta.dll`・第三者ライセンス表示（`THIRD_PARTY_LICENSES.txt`）・Lua ランタイム（`scripts/`）を `ghosts/hello-pasta/ghost/master/` に配置
+4. `pasta_check release` を実行（updates.txt / `release/hello-pasta.nar` 作成）
+5. `release/pasta.dll.zip` を作成（`pasta.dll` と `THIRD_PARTY_LICENSES.txt`）
+6. バージョン整合チェック
+7. リリース手順の表示
 
 **注**: テキスト系配布ファイル（`descript.txt` / `pasta.toml` / `dic/*.pasta` / `install.txt`）は `ghosts/hello-pasta/` に手書きで配置済みのため、コピー工程はありません。`release.ps1` は生成物（画像・DLL・ランタイム）の配置とパッケージングのみを担います。
+
+**注**: `release.ps1` の成果物は手元の動作確認用で、コミットの対象ではありません。手順 3 で `ghost/master/` に置く `pasta.dll`・`THIRD_PARTY_LICENSES.txt`・`scripts/` と、出力先の `release/` は `.gitignore` で無視されます（シェルの画像 `surface*.png`・`surfaces.txt` は従来どおり追跡します）。配布物の公開は、リリースタグ `vX.Y.Z` の push を契機にリリース CI（`.github/workflows/release.yml`）がソースから作り直して行います。手順は [RELEASE.md](RELEASE.md) を参照してください。
 
 ### 配布物の確認
 
@@ -131,20 +134,30 @@ hello-pasta/
 │   └── master/
 │       ├── descript.txt        # [SSOT]
 │       ├── pasta.toml          # [SSOT]
-│       ├── dic/                # pasta DSL 辞書 [SSOT]
-│       │   ├── actors.pasta
-│       │   ├── boot.pasta
-│       │   ├── choice.pasta
-│       │   ├── click.pasta
-│       │   └── talk.pasta
-│       ├── pasta.dll           # [gen] SHIORI DLL（cargo build）
-│       └── scripts/            # [gen] Lua ランタイム（pasta_lua/scripts/）
+│       ├── dic/                # pasta DSL 辞書 [SSOT]（段階ごとに 1 ファイル。STAGES.md 参照）
+│       │   ├── 01-boot.pasta     # 1 段: 起動の一言（OnBoot）
+│       │   ├── 02-talk.pasta     # 2 段: 2 人の掛け合い（＊会話 ＝ ランダムトーク）
+│       │   ├── 03-face.pasta     # 3 段: アクター辞書と表情
+│       │   ├── 04-variety.pasta  # 4 段: 同名シーン・単独 ＊ で毎回ちがう話
+│       │   ├── 05-words.pasta    # 5 段: 単語の定義と参照
+│       │   ├── 06-hour.pasta     # 6 段: 時報
+│       │   ├── 07-greeting.pasta # 7 段: 挨拶（OnGhostChanged/Changing・OnFirstBoot・OnClose）
+│       │   ├── 08-touch.pasta    # 8 段: ダブルクリックへの反応（＄ｒ４）
+│       │   ├── 09-choice.pasta   # 9 段: 選択肢
+│       │   ├── 10-save.pasta     # 10 段: 保存される変数（＄＊回数）
+│       │   ├── 11-jump.pasta     # 11 段: Call・前方一致・ローカルシーン・チェイントーク
+│       │   └── 12-lua.pasta      # 12 段: Lua ブロックの関数を呼ぶ
+│       ├── pasta.dll           # [gen] SHIORI DLL（cargo build・コミットしない）
+│       ├── THIRD_PARTY_LICENSES.txt # [gen] 第三者ライセンス表示（cargo about・コミットしない）
+│       └── scripts/            # [gen] Lua ランタイム（pasta_lua/scripts/ の写し・コミットしない）
 └── shell/
     └── master/
         ├── descript.txt        # [SSOT]
         ├── surfaces.txt        # [gen] cargo run（generate_ghost）
         └── surface*.png        # [gen] cargo run（generate_ghost）
 ```
+
+段階表（各段で教える表現・追加するファイル・検証するイベント）は [`STAGES.md`](STAGES.md) にあります。段階 N の辞書は `01`〜`NN` のファイルの集まりで、12 段目（全ファイル）が配布版の辞書です。
 
 ## ライセンス
 

@@ -1,7 +1,8 @@
 # スクリプト用ランタイム API
 
-ごきげんよう。`scripts/` から呼べるランタイムの道具――ACT、WORD、GLOBAL、SAVE を、ここで一望にいたしますわ。
-どの道具で何ができるのか、手元に置いておけば迷うことはございませんの。さあ、参りましょう。
+> 【クローディア】ランタイムの道具を一望にする頁ですわ。ACT、WORD、GLOBAL、SAVE、PASTA――`scripts/` から呼べる道具を、ここにまとめて並べましたの。
+
+> 【アンソニー】どの道具で何ができるのか、ここを開けば分かるわけでございますね。
 
 ---
 
@@ -32,9 +33,10 @@ local save, var = act:init_scene(SCENE)
 
 - Lua ブロックで定義するシーン関数（`function SCENE.名前(act, ...)`）の先頭で呼ぶ。`SCENE` は、その Lua ブロックが属するグローバルシーンのシーンテーブルである。
 - 戻り値の `save`・`var` は `act.save`・`act.var` と同じ表である。
-- 呼ぶと、そのシーンが実行中のシーンになる。名前の検索（[検索と呼び出し](#検索と呼び出し)）の 1・2 段目と、選択肢の行き先の検索（[OnChoiceSelectEx](shiori-events.md#onchoiceselectex)）は、実行中のシーンを基準にする。
+- 呼ぶと、そのシーンが実行中のシーンになる。名前の検索（[検索と呼び出し](#検索と呼び出し)）の 1・2 段目と、選択肢が記録する「選択肢を出したグローバルシーン」（[choice](#choicetarget-display)）は、実行中のシーンを基準にする。
+- 実行中のシーンは、次に `init_scene` が呼ばれるまで変わらない。ただし、`call_restore`・`word`・`expr_fn`・`expr_fn_var`・`global_fn` で呼んだ関数から戻ると、呼ぶ前のシーンに戻る（[検索と呼び出し](#検索と呼び出し)）。
 - シーン関数でない関数（`GLOBAL` の関数など）で `save`・`var` が必要なときは、`init_scene` を呼ばずに `act.save`・`act.var` を使う。
-- アクション行の `＠名前（…）`・`＠単語`・`＠＄変数名（…）`・`＠＄変数名` から呼ばれた関数は、第 1 引数に ACT ではなくアクタープロキシを受け取る（`＠＊名前（…）` は ACT を受け取る）。その場合の ACT はプロキシの `act` フィールドから取る（[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。
+- シーン関数は、アクション行の `＠名前（…）`・`＠単語`・`＠＄変数名（…）`・`＠＄変数名` から呼ばれた場合も、第 1 引数に ACT を受け取る。アクタープロキシを受け取るのは、アクション行のアクターの表の関数だけである（[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。
 
 ```lua
 function SCENE.カウント(act)
@@ -79,6 +81,13 @@ act:sakura_script(actor, text) -> act
 ```
 
 アクターに属するさくらスクリプトを積む。アクション行に書いたさくらスクリプトの生成先である。`talk` と同じく、組み立て時に `talk_to_script` を通る。
+
+- `talk` と違い、続けて積んでも他のトークンとつながらず、1 回の呼び出しのテキストごとに `talk_to_script` を通る。
+- 囲み（`\_?…\_?`・`\_!…\_!`）は、開きと閉じを 1 回の呼び出しのテキストに入れる。開きと閉じを別々の呼び出しで積むと囲みとして読まれず、それぞれ閉じの無い `\_?`（`\_!`）としてただのタグになる（[文字の分類](modules/pasta-sakura-script.md#文字の分類)）。
+
+```lua
+act:sakura_script(act.さくら.actor, "\\_?\\s[1]\\_?")   -- 囲みとして読まれる
+```
 
 #### raw_script(text)
 
@@ -169,7 +178,8 @@ local name = act:get_property("sakura.name", 10, "name取得タイムアウト")
 
 - いずれも `act` を返し、続けて呼べる。
 - 表示制御のトークンは、直前に積まれた `talk`・`sakura_script` のアクターの出力の中に入る（そのアクターの立ち位置に効く）。
-- 1 回の出力（`yield` またはシーンの終了で区切られる範囲）の中で、まだ `talk` も `sakura_script` も積まれていないうちに積んだ表示制御は出力されない。`choice`・`choice_timeout` も同じである。`raw_script` はこの制約を受けない。
+- 1 回の出力（`yield` またはシーンの終了で区切られる範囲）の中で、まだ `talk` も `sakura_script` も積まれていないうちに積んだ表示制御は、どのアクターにも結び付かず、スコープ切替タグを付けずに、積んだ位置にそのまま出力される。`clear_spot` の後、まだ発言を積んでいないうちに積んだ表示制御も同じである。`choice`・`choice_timeout` も同じ規則に従う。
+- 発言者の表情は、発言の中か発言の後に書く。発言より前に積んだ `surface` は、次の発言者の表情にはならない。
 
 ```lua
 act:talk(act.さくら.actor, "えっ")
@@ -185,7 +195,8 @@ act:surface(5):wait(500):talk(act.さくら.actor, "驚いた！"):newline()
 
 - 立ち位置の変更は、応答を組み立てるときに積んだ順に反映され、以降の発言の `\p[番号]` が変わる。設定はイベントをまたいで保たれる。
 - 立ち位置が無いアクターは、スポット 0 で話す（警告ログが出る）。
-- 1 回の出力の中で、同じアクターの発言が `set_spot`・`clear_spot` の前後に続くと、後の発言も変更前の立ち位置で出力される（変更はそのアクターの続く発言の後に反映される）。
+- 1 回の出力の中で、同じアクターの発言が `set_spot` の前後に続くと、後の発言も変更前の立ち位置で出力される（変更はそのアクターの続く発言の後に反映される）。
+- `clear_spot` の後の発言は、前の発言と同じアクターでも、`clear_spot` とその後の `set_spot` を反映した立ち位置で出力される。
 - 戻り値が `nil` のため、続けて呼べない。
 - DSL の `％` 行は、シーンの先頭で `clear_spot()` と、並べたアクターごとの `set_spot(名前, 番号)` を生成する（[シーンスコープ内でのアクター指定](../grammar/actor-dictionary.md#シーンスコープ内でのアクター指定)）。
 
@@ -197,15 +208,16 @@ act:surface(5):wait(500):talk(act.さくら.actor, "驚いた！"):newline()
 | ------ | ---- | ------ |
 | `act.さくら:talk(text)` | `act:talk(act.さくら.actor, text)` と同じ | `nil` |
 | `act.さくら:sakura_script(text)` | `act:sakura_script(act.さくら.actor, text)` と同じ | `nil` |
-| `act.さくら:word(name, var_path)` | アクター辞書を先に探してから単語を探す（[アクタースコープと単語参照の統合](../grammar/actor-dictionary.md#アクタースコープと単語参照の統合)）。見つかった関数にはプロキシを渡す。`var_path` の扱いは `act:word` と同じで、動的参照のときアクターの表は、表自身のフィールド（`name` と pasta.toml の `[actor.名前]` で設定した値など。`create_word` などのメソッドは含まない）だけを探す | 単語、または `nil` |
-| `act.さくら:expr_fn(key, ...)` | `act:expr_fn` と同じ検索で関数を探して呼ぶ。関数の第 1 引数はプロキシ | 関数の戻り値、または `nil` |
-| `act.さくら:expr_fn_var(value, var_path, ...)` | `act:expr_fn_var` と同じ検索で関数を探して呼ぶ。関数の第 1 引数はプロキシ | 関数の戻り値、または `nil` |
+| `act.さくら:word(name, var_path)` | アクター辞書を先に探してから単語を探す（[アクタースコープと単語参照の統合](../grammar/actor-dictionary.md#アクタースコープと単語参照の統合)）。見つかった関数には、アクターの表で見つかったときはプロキシを、それ以外の段で見つかったときは ACT を渡す。`var_path` の扱いは `act:word` と同じで、動的参照のときアクターの表は、表自身のフィールド（`name` と pasta.toml の `[actor.名前]` で設定した値など。`create_word` などのメソッドは含まない）だけを探す | 単語、関数の戻り値、または `nil` |
+| `act.さくら:expr_fn(key, ...)` | `act:expr_fn` と同じ検索で関数を探して呼ぶ（アクターの表は探さない）。関数の第 1 引数は ACT | 関数の戻り値、または `nil` |
+| `act.さくら:expr_fn_var(value, var_path, ...)` | `act:expr_fn_var` と同じ検索で関数を探して呼ぶ（アクターの表は探さない）。関数の第 1 引数は ACT | 関数の戻り値、または `nil` |
 | `act.さくら.actor` | アクターオブジェクト | — |
 | `act.さくら.act` | 元の ACT | — |
 
+- `word`・`expr_fn`・`expr_fn_var` は、呼んだ関数の先頭の戻り値が ACT またはそのプロキシそのものなら `nil` を返す。それ以外の戻り値は、複数の値も含めてそのまま返す。ACT の `word`・`expr_fn`・`expr_fn_var`・`global_fn` は戻り値を変えない（[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。
 - `talk`・`sakura_script` は `nil` を返すため、プロキシの呼び出しは続けて書けない。
 - メソッド名（`talk`・`wait`・`yield` など）やフィールド名（`save`・`var`・`actors` など）と同じ名前のアクターは、`act.名前` ではプロキシにならない。
-- 生成コードは、アクション行の発言とアクター付きの単語参照・関数呼び出しをこの形で書く。
+- 生成コードは、アクション行の発言とアクター付きの単語参照・関数呼び出しを、`act.名前` ではなく [actor_proxy](#actor_proxyname) で得たプロキシで書く（`ぱすた：こんにちは` は `act:actor_proxy("ぱすた"):talk("こんにちは")`）。名前を文字列で渡すため、メソッド名・フィールド名と同じ名前のアクターも、アクション行では話せる。
 
 ### 検索と呼び出し
 
@@ -214,11 +226,13 @@ act:surface(5):wait(500):talk(act.さくら.actor, "驚いた！"):newline()
 | モード | 2 段目（前方一致） | 5 段目（前方一致） | 使うメソッド |
 | ------ | ------------------ | ------------------ | ------------ |
 | `"word"` | 実行中のシーンのローカル単語 | グローバル単語 | `word` |
-| `"scene"` | 実行中のシーンのローカルシーン | グローバルシーン | `find_scene`・`call` |
+| `"scene"` | 実行中のシーンのローカルシーン | グローバルシーン | `find_scene`・`call`・`call_restore` |
 | `"expr"` | 実行中のシーンのローカルシーン | グローバルシーン | `expr_fn`・`expr_fn_var` |
 
 - 1 段目（実行中のシーンのシーンテーブル）・3 段目（act のメソッド。関数の値だけ）・4 段目（`GLOBAL` テーブル）は、どのモードでも同じである。
 - `@pasta_search` を読み込めない環境（テストなど）では、2 段目と 5 段目を飛ばす。
+- 5 段目でグローバルシーンを探すときは、範囲を指定しない [search_scene](modules/pasta-search.md#search_scenename-global_scene_name) を使うため、検索キーが pasta.toml の別名表の別名と完全に一致すると、置き換え先の名前で探す（[シーン名の別名](../grammar/call-jump.md#シーン名の別名)）。既定の別名表のもとでは、`act:call(nil, "会話", nil)` は `act:call(nil, "OnTalk", nil)` と同じ候補（`＊OnTalk` と `＊会話` で宣言したシーンを含む）から選ぶ。2 段目（ローカルシーン）と単語の検索は置き換えない。
+- `word`・`expr_fn`・`expr_fn_var`・`call_restore` と、アクタープロキシの `word`・`expr_fn`・`expr_fn_var` は、見つけた関数から戻った後、実行中のシーンを呼ぶ前のシーンに戻す。関数の中で別のシーンが `init_scene` を呼んでも、戻った後の名前の検索は呼び出し元のシーンを基準にする。`call` は戻さない（[call](#callglobal_scene_name-key-attrs-)）。
 - 変数の値を名前にする動的参照（`var_path` を渡した `word` と `expr_fn_var`。DSL の [動的単語参照](../grammar/words.md#動的単語参照)）は、3 段目を探さず、1 段目はシーンテーブル自身のキー（`__global_name__`・シーン関数・Lua ブロックで定義した関数）だけを探す。4 段目の `GLOBAL` は探すため、値が `GLOBAL` に登録された名前（ランタイムが登録する `yield`・`チェイントーク` を含む）と同じなら、その関数が見つかって呼ばれる。
 
 #### word(name, var_path)
@@ -301,21 +315,112 @@ act:call(global_scene_name, key, attrs, ...) -> any
 | パラメータ | 型 | 説明 |
 | ---------- | -- | ---- |
 | `global_scene_name` | string または nil | 使わない（生成コードは `SCENE.__global_name__` を渡す） |
-| `key` | string または nil | 検索する名前 |
+| `key` | string または nil | 検索する名前。動的ターゲットの生成コードは [call_key](#call_keyvalue-var_path-desc) の戻り値を渡す |
 | `attrs` | table または nil | 使わない（生成コードは `{}` を渡す） |
 | `...` | any | 呼び出す関数に渡す引数 |
 
-- `"scene"` モードで `key` を探し、見つかったのが関数なら `関数(act, ...)` を呼んでその戻り値を返す。
-- 関数以外の値が見つかったとき、または見つからないときは、警告ログを出して `nil` を返す。
-- `key` が `nil` のときは、検索せずに警告ログを出して `nil` を返す。
+- `"scene"` モードで `key` を探し、見つかったのが関数なら `関数(act, ...)` を呼んでその戻り値を返す。関数は末尾位置で呼ぶ（`return 関数(act, ...)`）ため、`return act:call(…)` の形で呼び出しをつないでも、呼び出しは深くならない。
+- 関数以外の値が見つかったとき、または見つからないときは、警告ログ `act:call - handler not found: key='名前', mode='scene', via=act` を出し、失敗表記 `【Call失敗：「名前」が見つからない】` を積んで（[failure](#failuretext-warning)）、`nil` を返す。Lua から直接呼んだ場合も、DSL の Call 行と同じく失敗表記を積む。
+- `key` が `nil` のときは、検索せずに警告ログ `act:call - nil key (undefined variable?), skipping scene search` を出して `nil` を返す。失敗表記は積まない。
+- `key` が `call_key` の返した「呼ばない」印のときは、検索も警告もせずに `nil` を返す（警告と失敗表記は `call_key` が出している）。
 - 呼び出しはコルーチンを新しく作らず、実行中のシーンのコルーチンの中で行う。呼んだ先で `yield` すると、呼び出し元のシーンごと中断する。
-- 呼んだ先のシーン関数が `init_scene` を呼ぶと、戻った後も実行中のシーンは呼んだ先のシーンのままになる。
-- DSL の Call 行 `＞名前（引数…）` は `act:call(SCENE.__global_name__, "名前", {}, 引数…)` になる（[Call / Jump](../grammar/call-jump.md)）。
+- 実行中のシーンは戻さない。呼んだ先のシーン関数が `init_scene` を呼ぶと、戻った後も実行中のシーンは呼んだ先のシーンのままになる。戻った後に呼ぶ前のシーンへ戻す呼び出しは [call_restore](#call_restoreglobal_scene_name-key-attrs-) である。
+- DSL の Call 行は、ローカルシーンの最後の行なら `return act:call(SCENE.__global_name__, "名前", {}, 引数…)`、それ以外の行なら `act:call_restore(SCENE.__global_name__, "名前", {}, 引数…)` になる。動的ターゲット（`＞＄名前` など）では、`"名前"` の代わりに `act:call_key(…)` が入る（[Call / Jump](../grammar/call-jump.md)）。
 
 ```lua
 act:call(nil, "挨拶", nil)           -- 「挨拶」で前方一致するシーンを探して呼ぶ
 local fn = act:find_scene("挨拶")    -- 呼ばずに関数だけを得る
 ```
+
+#### call_restore(global_scene_name, key, attrs, ...)
+
+```lua
+act:call_restore(global_scene_name, key, attrs, ...) -> any
+```
+
+- 引数は [call](#callglobal_scene_name-key-attrs-) と同じである。`act:call` を呼び、その戻り値をすべてそのまま返す。
+- 戻った後、実行中のシーンを呼ぶ前のシーンに戻す。呼んだ先がシーン関数でも Lua の関数でも、見つからなかった場合や `key` が `nil`・「呼ばない」印の場合でも戻す。呼んだ先が `yield` で中断した場合は、再開して戻った時点で戻す。
+- 戻すのは実行中のシーンだけである。記録の無い選択 ID の行き先の検索に使う「最後に `init_scene` を呼んだグローバルシーン」（[OnChoiceSelectEx](shiori-events.md#onchoiceselectex)）は戻さない。
+- 戻った後に処理が残るため、呼び出しの段が 1 つ残る（`return act:call(…)` は末尾呼び出しで段を残さない）。呼んだ先の中で `return act:call(…)` でつないだ呼び出しは深くならない。
+- DSL の Call 行のうち、ローカルシーンの最後の行でないものはこの呼び出しになる。
+
+```lua
+act:call_restore(nil, "雑談", nil)   -- 「雑談」を呼び、戻った後も実行中のシーンは呼ぶ前のまま
+```
+
+#### call_key(value, var_path, desc)
+
+```lua
+act:call_key(value, var_path?, desc?) -> string | 「呼ばない」印
+```
+
+| パラメータ | 型 | 説明 |
+| ---------- | -- | ---- |
+| `value` | any | 動的ターゲットの式の値 |
+| `var_path` | string または nil | 式が変数参照 1 つのときの変数の場所（`"var.x"`・`"save.x"`・`"args[1]"`）。警告ログと失敗表記に使う |
+| `desc` | string または nil | 式が関数呼び出し 1 つのときの表記（`"@名前()"`・`"@*名前()"`・`"@$var.名前()"`）。警告ログと失敗表記に使う |
+
+- 空でない文字列（文字列 `"nil"` を含む）はそのまま、数値は `tostring(value)` を検索キーとして返す。
+- それ以外の値（`nil`・空文字列・真偽値・表など）では、警告ログと失敗表記（[failure](#failuretext-warning)）を出し、「呼ばない」印を返す。印を受け取った `act:call`・`act:call_restore` は、検索せずに `nil` を返す。印は外から作れない値で、文字列 `"nil"` とも `false` とも区別される。
+- 警告ログは、`var_path` があれば `WORD.dynamic_key(value, var_path, "act:call")` の警告（[WORD.dynamic_key](#worddynamic_keyvalue-var_path-via)）、無ければ `act:call - key is not a string or number: operand='@名前()', value=nil` の形である。`operand=` は `desc` があるときだけ付き、`value=` の表記は [PASTA.num](#pastanumop-v-desc) と同じである。値が `nil` で `var_path` も `desc` も無いとき（手書きの Lua から `nil` を渡した場合。DSL の動的ターゲットでは起きない）は警告しない。
+- 失敗表記の文言は [動的ターゲットの値](../grammar/call-jump.md#動的ターゲットの値) の表のとおりである。
+- DSL の動的ターゲットは、`＞＄x` が `act:call_key(var.x, "var.x")`、`＞＠f（）` が `act:call_key(act:expr_fn("f"), nil, "@f()")`、それ以外の式が `act:call_key(式)` になる。
+
+#### restore_scene(scene, ...)
+
+```lua
+act:restore_scene(scene, ...) -> ...
+```
+
+- 実行中のシーンを `scene`（シーンテーブルまたは `nil`）にし、2 番目以降の引数をそのまま返す。
+- `call_restore`・`word`・`expr_fn`・`expr_fn_var`・`global_fn` とアクタープロキシの `word`・`expr_fn`・`expr_fn_var` が、関数から戻った後に実行中のシーンを戻すのに使う。
+- `init_scene` と違い、最後に `init_scene` を呼んだグローバルシーンの記録は変えない。
+
+#### failure(text, warning)
+
+```lua
+act:failure(text, warning?) -> nil
+```
+
+- `warning` があれば警告ログに出し、`【text】` を生のさくらスクリプト（`act:raw_script` と同じトークン）として積む。句読点のウェイトも budoux の改行も入らず、`text` はエスケープしない。
+- スコープ切替タグを付けずに積んだ位置へ出力される。直前に話したアクターのバルーンに続けて出て、次に同じアクターが話してもスコープ切替タグは増えない。出力の先頭では、その時点のスコープのバルーンに出る（[Call が失敗したとき](../grammar/call-jump.md#call-が失敗したとき)）。
+- `act:call`（見つからないとき）と `act:call_key`（検索キーにならない値のとき）が、Call の失敗表記を出すのに使う。
+
+`call_restore`・`call_key`・`restore_scene`・`failure` は act のメソッドのため、ほかの act のメソッドと同じく、`＠名前（…）`・`＠名前`・`＞名前` の検索の 3 段目で名前から見つかる（[検索と呼び出し](#検索と呼び出し)）。
+
+### アクター・グローバル関数
+
+アクション行のアクターと `＠＊名前（…）` の生成コードは、次のメソッドを呼ぶ。どちらも、アクターや関数が無いときに Lua のエラーにせず、警告ログを出して続ける。手書きの Lua からも呼べる。
+
+| メソッド | 内容 | 戻り値 |
+| -------- | ---- | ------ |
+| `act:actor_proxy(name)` | アクター `name` のアクタープロキシを得る | アクタープロキシ（常に `nil` でない） |
+| `act:global_fn(name, ...)` | `GLOBAL` の関数 `name` を呼ぶ | 関数の戻り値、または `nil` |
+
+- 2 つの名前は act のメソッドのため、ほかの act のメソッド（`talk`・`wait` など）と同じ制限を受ける。手書き Lua の `act.actor_proxy`・`act.global_fn` は、同じ名前のアクターがいてもプロキシにならない（[アクタープロキシ](#アクタープロキシ)）。また、`＠名前（…）`・`＠名前` の検索の 3 段目で見つかるため、`GLOBAL` に同じ名前の関数があっても `＠名前（…）` では届かない（`＠＊名前（…）` では届く）。1・2 段目（実行中のシーンのシーンテーブル、ローカル単語・ローカルシーン）にある同じ名前は、3 段目より先に見つかる（[検索と呼び出し](#検索と呼び出し)）。
+- 式の算術と連結の生成コードが被演算子に使う関数は、act のメソッドではなく `pasta` モジュールの関数である（[PASTA](#pasta)）。
+
+#### actor_proxy(name)
+
+```lua
+act:actor_proxy(name) -> ActorProxy
+```
+
+- `act.actors` に `name` があれば、`act.名前` と同じアクタープロキシを返す。ログもトークンも出さない。名前を文字列で受け取るため、メソッド名・フィールド名と同じ名前のアクターでもプロキシになる。
+- 無ければ、名前だけを持つその場限りのアクターのプロキシを返す。このアクターは登録されず、`act.actors` にも立ち位置にも書かれない（立ち位置が無いため、スポット 0 で話す）。直前に積まれた `talk`・`sakura_script` が同じ名前のその場限りのアクターのものでなければ、目印の台詞 `【未登録アクター：名前】` を積み、警告ログ `act:actor_proxy - unregistered actor: name='名前'` を出す。
+- アクション行の生成コードは、アクターをこの形で参照する。DSL での見え方は [登録していないアクター名](../grammar/action-line.md#登録していないアクター名) を参照する。
+
+#### global_fn(name, ...)
+
+```lua
+act:global_fn(name, ...) -> any
+```
+
+- `GLOBAL[name]` が関数なら `関数(act, ...)` を呼び、その戻り値をすべて返す。関数の中で起きたエラーは、そのまま伝わる。
+- 無いとき、関数でない値のときは、警告ログ `act:global_fn - function not found: key='名前'` を出して `nil` を返す。
+- 5 段の検索は行わず、`GLOBAL` だけを見る。
+- 関数から戻った後、実行中のシーンを呼ぶ前のシーンに戻す（[検索と呼び出し](#検索と呼び出し)）。
+- DSL の `＠＊名前（…）` は `act:global_fn("名前", …)` になる。アクション行の中でも、関数の第 1 引数は act である（[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。
 
 ### yield
 
@@ -352,9 +457,10 @@ act:choice(target, display?) -> act
 | `target` | string | 選択肢の ID（行き先のシーン名） |
 | `display` | string または nil | 表示テキスト。`nil` なら `target` を表示する |
 
-- `\![*]\q[表示テキスト,ID]` を出力する選択肢を積む。表示テキストと ID の中の `\`・`]`・`,` は `\` でエスケープされる。
-- 選ばれると、OnChoiceSelectEx の既定の処理が、ID と前方一致するローカルシーンを、直前に実行したグローバルシーンの配下から探して実行する（[OnChoiceSelectEx](shiori-events.md#onchoiceselectex)）。
-- 表示制御と同じく、1 回の出力の中で `talk`・`sakura_script` より前に積むと出力されない（[表示制御](#表示制御)）。
+- `\![*]\q[表示テキスト,ID,グローバルシーン名]` を出力する選択肢を積む。グローバルシーン名は、`choice` を呼んだ時点の実行中のシーンのグローバルシーンの登録名（`メイン_1` の形）で、選択肢を出したグローバルシーンを表す。表示テキスト・ID・グローバルシーン名の中の `\`・`]`・`,` は `\` でエスケープされる。
+- 実行中のシーンが無いとき（シーンの外で呼んだとき）と、ID が `On` または `script:` で始まるときは、3 番目の引数を付けずに `\![*]\q[表示テキスト,ID]` を出力する。
+- 選ばれると、OnChoiceSelectEx の既定の処理が、ID と前方一致するローカルシーンを、選択肢を出したグローバルシーンの配下から探して実行する。見つからなければ、ID と前方一致するグローバルシーンを探す（[OnChoiceSelectEx](shiori-events.md#onchoiceselectex)）。
+- 表示制御と同じく、1 回の出力の中で `talk`・`sakura_script` より前に積むと、どのアクターにも結び付かず、積んだ位置にそのまま出力される（[表示制御](#表示制御)）。
 - DSL の選択肢行 `＠？行き先` も同じ選択肢を出力する（[選択肢行](../grammar/block-structure.md#選択肢行)）。
 
 ```lua
@@ -370,7 +476,7 @@ act:choice_timeout(seconds?) -> act
 ```
 
 - 選択肢のタイムアウトを設定するタグ `\![set,choicetimeout,ミリ秒]` を積む。ミリ秒は `seconds` の 1000 倍を切り捨てた整数で、`seconds` が `nil` なら 0（タイムアウトなし）である。
-- `choice` と同じく、1 回の出力の中で `talk`・`sakura_script` より前に積むと出力されない。
+- `choice` と同じく、1 回の出力の中で `talk`・`sakura_script` より前に積むと、どのアクターにも結び付かず、積んだ位置にそのまま出力される（[表示制御](#表示制御)）。
 
 ```lua
 act:choice_timeout(30)   -- 30 秒でタイムアウト
@@ -395,7 +501,7 @@ local WORD = require("pasta.word")
 | `WORD.create_word(key)` | グローバル単語（`create_global` の別名） | 単語参照の 5 段目 |
 
 - `require("pasta").create_word(key)` も `WORD.create_global(key)` と同じである。
-- `scene_name` には、グローバルシーンの登録名（シーン名の後ろに同名シーンの通し番号を付けた名前。1 つ目の `＊メイン` なら `"メイン1"`）を渡す（[search_scene](modules/pasta-search.md#search_scenename-global_scene_name)）。
+- `scene_name` には、グローバルシーンの登録名（シーン名の照合用の名前の後ろに `_` と、照合用の名前が同じシーンの通し番号を付けた名前。1 つ目の `＊メイン` なら `"メイン_1"`、1 つ目の `＊挨拶・朝` なら `"挨拶_朝_1"`。別名で宣言したシーンは置き換え後の名前から作られ、既定の別名表のもとで `＊OnTalk` の無いゴーストの 1 つ目の `＊会話` なら `"OnTalk_1"`）を渡す（[search_scene](modules/pasta-search.md#search_scenename-global_scene_name)）。
 - どの関数もビルダーを返す。値はビルダーの `entry` で足す。
 - 単語の検索対象は、シーン辞書の読み込みの最後に確定する（[利用できる時期](modules/pasta-search.md#利用できる時期)）。`main.lua` や Lua ブロックのトップレベルで登録した単語は検索できる。シーン関数やイベントハンドラの実行中に登録した単語は、検索の対象にならない。
 
@@ -430,7 +536,7 @@ for _, food in ipairs(foods) do
 end
 
 -- ローカル単語の投入（1 つ目の ＊メイン のローカル単語）
-WORD.create_local("メイン1", "返事")
+WORD.create_local("メイン_1", "返事")
     :entry("はい", "ええ")
     :entry("そうね")
 
@@ -446,7 +552,7 @@ WORD.create_actor("さくら", "一人称")
 WORD.dynamic_key(value, var_path, via) -> string | nil
 ```
 
-動的参照の変数の値を、単語名・関数名に直す補助関数である。`act:word`（`var_path` を渡したとき）と `act:expr_fn_var` が使う。
+動的参照の変数の値を、単語名・関数名に直す補助関数である。`act:word`（`var_path` を渡したとき）と `act:expr_fn_var` が使う。`act:call_key`（`var_path` を渡したとき）は、値を検索キーにできないときの警告にだけ使う。
 
 | `value` | 戻り値 |
 | ------- | ------ |
@@ -455,7 +561,7 @@ WORD.dynamic_key(value, var_path, via) -> string | nil
 | `nil`・空文字列・それ以外の型 | `nil`（警告ログを出す） |
 
 - 文字列は DSL として読み直さない。`__tostring` を持つ表も文字列にしない。
-- 警告ログは `{via} - undefined variable: '{var_path}'`（`nil`）・`{via} - empty variable: '{var_path}'`（空文字列）・`{via} - unsupported value type: '{var_path}' ({型名})`（それ以外の型）である。ランタイムは `via` に `"act:word"`・`"act:expr_fn"`・`"proxy:word"`・`"proxy:expr_fn"` を渡す。
+- 警告ログは `{via} - undefined variable: '{var_path}'`（`nil`）・`{via} - empty variable: '{var_path}'`（空文字列）・`{via} - unsupported value type: '{var_path}' ({型名})`（それ以外の型）である。ランタイムは `via` に `"act:word"`・`"act:expr_fn"`・`"act:call"`・`"proxy:word"`・`"proxy:expr_fn"` を渡す。
 
 ### WORD.resolve_value(value, act)
 
@@ -483,8 +589,8 @@ end
 
 戻り値を使わない呼び出し `＄＝式` は [式文](../grammar/variables.md#式文exprstmt) で扱う。
 
-- DSL の `＠＊名前（引数…）` は `GLOBAL.名前(act, 引数…)` を直接呼ぶ。5 段の検索は行わず、未定義の名前を呼ぶと Lua のエラーになる。アクション行で呼んだ場合は戻り値が出力され（`nil` なら何も出力しない）、変数代入の右辺なら戻り値が代入される（[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。
-- `GLOBAL` は 5 段の検索の 4 段目（完全一致）でもある。`＠名前（…）`（ローカル呼び出し）・`＠名前`（単語参照）・`＞名前`（Call）は、1〜3 段目に無ければ `GLOBAL` の値を見つける（[検索と呼び出し](#検索と呼び出し)）。関数は `(act, 引数…)` で呼ばれる（アクション行の中の単語参照と関数呼び出しでは第 1 引数がアクタープロキシになる）。関数以外の値は、単語参照では文字列として出力される。
+- DSL の `＠＊名前（引数…）` は `act:global_fn("名前", 引数…)` になり、`GLOBAL` の関数を `(act, 引数…)` で呼ぶ。5 段の検索は行わない。未定義の名前・関数でない値のときは、警告ログを出して `nil` になる（[global_fn](#global_fnname-)）。アクション行で呼んだ場合は戻り値が出力され（`nil` なら何も出力しない）、変数代入の右辺なら戻り値が代入される（[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。
+- `GLOBAL` は 5 段の検索の 4 段目（完全一致）でもある。`＠名前（…）`（ローカル呼び出し）・`＠名前`（単語参照）・`＞名前`（Call）は、1〜3 段目に無ければ `GLOBAL` の値を見つける（[検索と呼び出し](#検索と呼び出し)）。関数は `(act, 引数…)` で呼ばれる（アクション行の中の単語参照と関数呼び出しでも第 1 引数は act である。[関数スコープの展開先](../grammar/variables.md#関数スコープの展開先)）。関数以外の値は、単語参照では文字列として出力される。
 - DSL の `＠名前（）` は `GLOBAL` の関数を直接は呼ばない。グローバル関数を確実に呼ぶには `＊` を付けた `＠＊名前（）` を使う。
 - 関数は、呼ばれる前であればいつ登録してもよい（`main.lua`・Lua ブロックなど）。
 
@@ -527,7 +633,71 @@ save.talk_count = (save.talk_count or 0) + 1
 
 `require("pasta.save")` が返す表は、`act.save`・`init_scene` の戻り値の `save` と同じ表である。ACT を受け取らない場所（`main.lua` のトップレベルなど）から永続化データを読み書きするときに使う。
 
+## PASTA
+
+`pasta` モジュール（`require "pasta"`）の関数のうち、式の算術と連結の生成コードが使う 2 つを扱う。DSL の式の算術と連結は、演算ごとに Lua の演算子を括弧で囲んだ `(左 演算子 右)` になり、被演算子はこの 2 つの関数で数値・文字列にしてから演算子に渡される（[DSL と Lua の対応表](../grammar/variables.md#dsl-と-lua-の対応表)）。
+
+- 2 つとも act のメソッドではない（`self` を取らず、ACT の状態を読み書きしない）。そのため、`＠名前（…）`・`＠名前` の検索の 3 段目では見つからない（[検索と呼び出し](#検索と呼び出し)）。
+- 被演算子の表に `__add`・`__concat`・`__tostring` などのメタメソッドがあっても呼ばない。
+- Lua のエラーを投げない。手書きの Lua からも呼べる。
+
+### PASTA.num(op, v, desc)
+
+```lua
+PASTA.num(op, v, desc?) -> number
+```
+
+| パラメータ | 型 | 説明 |
+| ---------- | -- | ---- |
+| `op` | string | 警告ログに出す演算子（`"+"`・`"-"`・`"*"`・`"/"`・`"%"`） |
+| `v` | any | 被演算子の値 |
+| `desc` | string または nil | 警告ログに出す被演算子の説明（`"var.x"`・`"@f()"` など） |
+
+| 値 | 戻り値 | 警告ログ |
+| -- | ------ | -------- |
+| 数値 | そのまま | なし |
+| 文字列で、`tonumber` が数値を返すもの（`"12"`・`"1.5"` など） | その数値 | なし |
+| `nil` | `0` | なし |
+| それ以外（数字でない文字列・空文字列・全角数字だけの文字列・真偽値・表・関数） | `0` | 1 行 |
+
+- 警告ログは `act:arith - operand is not a number: op='*', operand='var.x', value='abc' (string)` の形である。接頭辞の `act:arith` は算術の警告であることを表す（関数の名前ではない）。`operand=` は `desc` があるときだけ付く。`value=` は値の種類を表し、`'abc' (string)`・`true (boolean)`、それ以外は `(table)` のように型名だけになる（表の `__tostring` は呼ばない）。
+- `op` は警告ログに出すだけで、演算はしない。演算は生成コードの Lua の演算子が行う。
+- DSL の式の算術では、数値のリテラルと算術の演算の結果を除く被演算子が `PASTA.num` を通る（[算術の評価](../grammar/variables.md#算術の評価)）。
+
+### PASTA.str(v, desc)
+
+```lua
+PASTA.str(v, desc?) -> string
+```
+
+| パラメータ | 型 | 説明 |
+| ---------- | -- | ---- |
+| `v` | any | 被演算子の値 |
+| `desc` | string または nil | 警告ログに出す被演算子の説明（`"var.x"`・`"@f()"` など） |
+
+| 値 | 戻り値 | 警告ログ |
+| -- | ------ | -------- |
+| 文字列 | そのまま | なし |
+| 数値 | `tostring(v)`（アクション行で表示したときと同じ表記） | なし |
+| `nil` | `""` | なし |
+| それ以外（真偽値・表・関数） | `""` | 1 行 |
+
+- 警告ログは `act:concat - operand is not a string or number: op='&', operand='@真()', value=true (boolean)` の形である。接頭辞の `act:concat` は連結の警告であることを表す。`op` は DSL で全角・半角のどちらを書いても `'&'` である。`operand=` は `desc` があるときだけ付き、`value=` の表記は [PASTA.num](#pastanumop-v-desc) と同じである。
+- DSL の式の連結では、文字列のリテラルと連結の演算の結果を除く被演算子（数値のリテラルを含む）が `PASTA.str` を通る（[連結の評価](../grammar/variables.md#連結の評価)）。
+
+```lua
+local PASTA = require "pasta"
+
+PASTA.num("+", "12")             -- 12
+PASTA.num("+", nil, "var.x")     -- 0（警告しない）
+PASTA.num("*", "abc", "var.x")   -- 0（警告を 1 行出す）
+PASTA.str(3)                     -- "3"
+PASTA.str(nil, "var.x")          -- ""（警告しない）
+PASTA.str(true, "@真()")         -- ""（警告を 1 行出す）
+```
+
 ---
 
-道具の一覧は手に入りましたわね。フンッ、あとは使いこなすだけですわよ。
-さあ、あなたのゴーストに存分に働いてもらいましょう！
+> 【にっこり】道具の一覧は手に入りましたわね。あとは使いこなすだけ――さあ、あなたのゴーストに存分に働いてもらいましょう！
+
+> 【アンソニー】お嬢様、一度に全部を働かせては、ゴーストも息切れいたします。

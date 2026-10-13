@@ -378,10 +378,76 @@ async function runTests(): Promise<void> {
     expect(scopeCoversExactly(dollar, '＄x', VAR_REF_SCOPE, dollar.indexOf('＄＄') + 1), '＄＄x keeps its existing variable range');
   });
 
+  // --- Sakura Script / Escape Tests (paragraph-break-tag-only-talk 10.6) ---
+  const SAKURA_SCOPE = 'string.other.sakura-script.pasta';
+  const ESCAPE_SCOPE = 'constant.character.escape.pasta';
+
+  test('さくらスクリプト \\nHello は \\n だけがタグ', () => {
+    expect(scopeCoversExactly('　さくら：\\nHello', '\\n', SAKURA_SCOPE), '\\n only should be sakura-script');
+  });
+
+  test('エスケープ \\% はエスケープスコープ', () => {
+    expect(scopeCoversExactly('　さくら：a\\%b', '\\%', ESCAPE_SCOPE), '\\% should be escape');
+  });
+
+  test('囲み \\_?＠w\\_? は全体がさくらスクリプト', () => {
+    const line = '　さくら：a\\_?＠w\\_?b';
+    expect(scopeCoversExactly(line, '\\_?＠w\\_?', SAKURA_SCOPE), 'literal region should be sakura-script');
+    expect(!hasScope(tokenizeLine(line).tokens, WORD_SCOPE), '＠w inside literal region must not be word-ref');
+  });
+
+  test('引数の中の \\] を含む \\s[a\\]b] は 1 つのトークン', () => {
+    const line = '　さくら：\\s[a\\]b]x';
+    const text = '\\s[a\\]b]';
+    const start = line.indexOf(text);
+    const end = start + text.length;
+    expect(
+      tokenizeLine(line).tokens.some(
+        (t) => t.startIndex === start && t.endIndex === end && t.scopes.includes(SAKURA_SCOPE)
+      ),
+      '\\s[a\\]b] should be one sakura-script token'
+    );
+  });
+
   test('既存: 代入行の右辺の動的参照は行全体の変数スコープのまま', () => {
     const line = '＄x＝＠＄y';
     expect(scopeCoversExactly(line, 'x＝＠＄y', 'variable.other.pasta'), 'assignment body stays variable.other.pasta');
     expect(!hasScope(tokenizeLine(line).tokens, WORD_SCOPE), 'assignment line must not get inline word-ref scope');
+  });
+
+  // --- String Concat Operator Tests (string-concat-operator 7.6, 7.7) ---
+  // The grammar has no operator scopes and is NOT changed: the expression `＆`
+  // must get exactly the scopes `＋` gets in the same position, and the
+  // line-head attribute `＆` / talk-line `＆` keep their pre-existing scopes.
+  const scopesAt = (line: string, ch: string): string[] => {
+    const i = line.indexOf(ch);
+    const t = tokenizeLine(line).tokens.find((tok) => tok.startIndex <= i && i < tok.endIndex);
+    return t ? t.scopes : [];
+  };
+  const sameScopes = (a: string[], b: string[]) => a.join(' ') === b.join(' ');
+
+  test('式の ＆ は同じ位置の ＋ と同じスコープ（全角・半角）', () => {
+    for (const [cat, plus, op, pl] of [
+      ['＄x＝「a」＆＄b', '＄x＝１＋＄b', '＆', '＋'],
+      ['$x=「a」&$b', '$x=1+$b', '&', '+'],
+      ['＞「挨拶」＆＄種類', '＞「挨拶」＋＄種類', '＆', '＋'],
+    ]) {
+      const c = scopesAt(cat, op);
+      expect(c.length > 0 && sameScopes(c, scopesAt(plus, pl)), `${cat}: ${c.join(' ')}`);
+      expect(!c.includes('meta.attribute.pasta'), `${cat}: ＆ must not be shown as attribute marker`);
+    }
+  });
+
+  test('行頭の属性マーカー ＆ の表示は不変（全角・半角）', () => {
+    const attr = ['source.pasta', 'meta.attribute.pasta', 'keyword.other.marker.pasta'];
+    expect(sameScopes(scopesAt('  ＆author：Test', '＆'), attr), 'full-width attribute marker');
+    expect(sameScopes(scopesAt('  &author:Test', '&'), attr), 'half-width attribute marker');
+  });
+
+  test('台詞の中の ＆ の表示は不変（全角・半角）', () => {
+    const talk = ['source.pasta', 'meta.talk.pasta'];
+    expect(sameScopes(scopesAt('　さくら：A＆B', '＆'), talk), 'full-width talk ＆');
+    expect(sameScopes(scopesAt('　さくら：A&B', '&'), talk), 'half-width talk &');
   });
 
   // --- Variable Tests ---

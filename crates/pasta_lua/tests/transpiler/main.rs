@@ -19,6 +19,8 @@ mod fallback_search_integration_test;
 mod final_regression_test;
 mod record_wiring_element_test;
 mod record_wiring_scope_test;
+mod runtime_safety_test;
+mod scene_alias_declared_name_test;
 mod scene_test;
 mod snapshot_test;
 mod source_map_seam_test;

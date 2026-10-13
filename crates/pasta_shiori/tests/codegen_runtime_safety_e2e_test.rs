@@ -1,0 +1,132 @@
+//! 書き間違い（U18・U19・U20・U22）と `\\` エスケープ（U08）の SHIORI 経由 E2E テスト
+//!
+//! 仕様 `dsl-codegen-runtime-safety` task 4.2（requirements 4.1–4.3, 5.2, 5.5）。
+//!
+//! フィクスチャ `tests/fixtures/codegen_runtime_safety/` のシーンを SHIORI リクエストの
+//! イベント ID（シーン関数フォールバック）で起動し、500 にならず、書き間違いの箇所を既定の
+//! 結果に置き換えたトークが返ることを、最終さくらスクリプトの一致で固定する。
+//! フィクスチャは埋め込みの標準ランタイムと本番 entry.lua を通す（理由は pasta.toml のコメント）。
+//!
+//! 仕様 `string-concat-operator` task 5.1 の連結（`＆`）のシーンも同じフィクスチャで動かす。
+
+mod common;
+
+use common::copy_fixture_to_temp;
+use common::response::ShioriResponse;
+use common::test_env::ShioriTestEnv;
+use pasta::{PastaShiori, Shiori};
+
+/// イベント ID を指定して GET を送り、200 OK であることを確かめて Value を返す
+fn fire(event_id: &str) -> String {
+    let mut env = ShioriTestEnv::new("codegen_runtime_safety");
+    let resp = env
+        .request(&format!(
+            "GET SHIORI/3.0\nCharset: UTF-8\nSender: SSP\nID: {event_id}\n"
+        ))
+        .expect("request should succeed");
+    assert_eq!(
+        resp.status_code, 200,
+        "{event_id} must not be 500: {} {:?}",
+        resp.status_text, resp.value
+    );
+    resp.value.expect("Value header must exist")
+}
+
+/// `fire` と同じく GET を送り、Value とゴーストのログファイルの中身を返す。
+/// ロガーは non_blocking で書くため、ゴーストを drop して書き出しを待ってからログを読む。
+fn fire_with_log(event_id: &str) -> (String, String) {
+    let temp = copy_fixture_to_temp("codegen_runtime_safety");
+    let value = {
+        let mut shiori = PastaShiori::default();
+        assert!(
+            shiori
+                .load(0, temp.path().as_os_str())
+                .expect("SHIORI load should not error"),
+            "SHIORI load should return true"
+        );
+        let raw = shiori
+            .request(format!(
+                "GET SHIORI/3.0\r\nCharset: UTF-8\r\nSender: SSP\r\nID: {event_id}\r\n\r\n"
+            ))
+            .expect("request should succeed");
+        let resp = ShioriResponse::parse(&raw).expect("response should parse");
+        assert_eq!(
+            resp.status_code, 200,
+            "{event_id} must not be 500: {} {:?}",
+            resp.status_text, resp.value
+        );
+        resp.value.expect("Value header must exist")
+    };
+    let log = std::fs::read_to_string(temp.path().join("profile/pasta/logs/pasta.log"))
+        .unwrap_or_default();
+    (value, log)
+}
+
+/// U18・U19・U20・U22 を含むシーンが 500 にならず、既定の結果に置き換えたトークを返す（5.2, 5.5）
+#[test]
+fn test_typo_scene_returns_talk_with_default_results() {
+    let value = fire("OnTypoCheck");
+    let expected = concat!(
+        // U18: 未定義の ＠＊未定義関数（） は何も出力しない
+        r"\p[1]前後",
+        // U19: 未登録アクターは立ち位置 0 で、目印を付けて話す
+        r"\p[0]【未登録アクター：未登録さん】こんにちは",
+        // U20: act のメンバー名と同名のアクター talk が普通に話す
+        r"\p[2]トークです",
+        // U22: 数値にできない被演算子は警告を出して 0 とみなす（expr-nil-coercion 4.1）
+        r"\p[1]\n[150]結果0、\_w[450]終わり\e",
+    );
+    assert_eq!(value, expected);
+}
+
+/// U08: `C:\\new`・行末の `\\` がウェイト設定ありでも割れず、`\e` を壊さない（4.1–4.3, 5.5）
+#[test]
+fn test_escaped_backslash_survives_wait_insertion() {
+    let value = fire("OnEscapeCheck");
+    assert_eq!(
+        value,
+        r"\p[1]パスは、\_w[450]C:\\new。\_w[950]終わり。\_w[950]\\\e"
+    );
+}
+
+/// ログに Lua 側の警告が無いことを確かめる（ログが取れていることも確かめ、空のログで通らないようにする）
+fn assert_no_lua_warning(log: &str) {
+    assert!(
+        log.contains("SHIORI.load called successfully"),
+        "log must be captured:\n{log}"
+    );
+    assert!(
+        !log.contains(" WARN pasta_lua::runtime::log:"),
+        "no warning expected:\n{log}"
+    );
+}
+
+/// 未代入の変数を連結する式文があっても 500 にならず、続きの行を話す（string-concat-operator 6.4）。
+/// 連結の nil は空文字列とみなすので警告は出ない（expr-nil-coercion 2.1・3.1）
+#[test]
+fn test_concat_with_unassigned_variable_does_not_500() {
+    let (value, log) = fire_with_log("OnConcatUnassigned");
+    assert_eq!(value, r"\p[1]続行\e");
+    assert_no_lua_warning(&log);
+}
+
+/// 連結の被演算子の nil は空文字列とみなすので、代入先は残りの部分（`さん`）になり、警告は出ない
+/// （expr-nil-coercion 2.1・3.1）
+#[test]
+fn test_concat_nil_operand_leaves_the_rest() {
+    let (value, log) = fire_with_log("OnConcatNilShow");
+    assert_eq!(value, r"\p[1]前さん後\e");
+    assert_no_lua_warning(&log);
+}
+
+/// 関数呼び出しと Call の引数に連結した文字列が渡る（算術が連結より先: 1＋2＆「個」→「3個」）（1.5, 1.6, 4.4, 6.6）
+#[test]
+fn test_concat_passed_to_function_and_call_args() {
+    assert_eq!(fire("OnConcatArgs"), r"\p[1]連結引数連結呼出と3個\e");
+}
+
+/// 連結した名前（「連結」＆「_挨拶」）を動的ターゲットにして Call できる（4.4, 6.6）
+#[test]
+fn test_concat_as_dynamic_call_target() {
+    assert_eq!(fire("OnConcatDynamic"), r"\p[1]動的に呼ばれた\e");
+}

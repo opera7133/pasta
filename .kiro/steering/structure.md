@@ -34,6 +34,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │   │       └── registry/    # 型管理レイヤー（独立）
 │   │           ├── mod.rs   # Registry API
 │   │           ├── scene_registry.rs  # SceneRegistry - シーン管理
+│   │           ├── scene_alias.rs     # SceneAliasTable - シーン名の別名表（完全一致 1 段）
 │   │           ├── word_registry.rs   # WordDefRegistry - 単語辞書
 │   │           ├── scene_table.rs     # SceneTable - シーン検索
 │   │           ├── scene_table_candidate_tests.rs      # シーンテーブルテスト（候補収集/解決・#[path]パターン）
@@ -54,6 +55,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       │   │   ├── mod.rs          # コード生成エントリーポイント
 │       │   │   ├── scope_gen.rs    # スコープ生成（分割impl）
 │       │   │   ├── element_gen.rs  # 要素生成（分割impl）
+│       │   │   ├── expr_gen.rs     # 式生成（分割impl。値・関数呼び出し・引数・算術/連結の連鎖の組み直し）
 │       │   │   └── source_map.rs   # .pastaソースマップ記録シーム（SourceMapSink/PastaPos）
 │       │   ├── debug/      # VSCode Luaデバッグバックエンド（DAP・既定無効/ゼロコスト・SHIORI非依存）
 │       │   │   ├── mod.rs          # DebugConfig/enable()/DebugHandle/DebugError・有効化ゲート
@@ -78,7 +80,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       │   ├── loader/      # スクリプトローダー（ディレクトリモジュール）
 │       │   │   ├── mod.rs           # ローダーAPI
 │       │   │   ├── cache.rs         # キャッシュ管理
-│       │   │   ├── config.rs        # ローダー設定
+│       │   │   ├── config/          # ローダー設定（mod.rs・sections.rs。pasta.toml の [scene.alias] の読み込みを含む）
 │       │   │   ├── context.rs       # ローダーコンテキスト
 │       │   │   ├── discovery.rs     # スクリプト検出
 │       │   │   ├── extract.rs       # 起動時自己展開（内蔵zip解凍・MD5マーカー比較・準アトミック展開）
@@ -96,6 +98,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       │   │   └── log.rs              # ランタイムログ
 │       │   ├── sakura_script/ # さくらスクリプト処理
 │       │   │   ├── mod.rs           # さくらスクリプトAPI
+│       │   │   ├── line_breaker.rs  # BudouX による自動改行
 │       │   │   ├── tokenizer.rs     # トークナイザー
 │       │   │   └── wait_inserter.rs # ウェイト挿入
 │       │   ├── presentation/  # 宿主非依存 presentation マーカー契約（talk/actor切替/wait/choice・拡張可能）
@@ -183,7 +186,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │   │       ├── server.rs    # PastaLangServer (tower-lsp trait実装)
 │   │       └── transport.rs # WASM/Nativeプラットフォーム抽象化
 │   ├── pasta_check/         # リリースCLIツール
-│   │   ├── Cargo.toml       # pasta_check設定（lexopt, md5, zip, pasta_lua依存）
+│   │   ├── Cargo.toml       # pasta_check設定（lexopt, md5, zip 依存）
 │   │   └── src/
 │   │       ├── main.rs          # CLIエントリーポイント
 │   │       ├── release.rs       # リリースビルドオーケストレーション
@@ -195,8 +198,8 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       ├── Cargo.toml       # 画像生成・配布物作成用依存
 │       ├── README.md        # クレート概要
 │       ├── RELEASE.md       # リリース手順
-│       ├── release.ps1      # ビルド＋配布パッケージ生成スクリプト
-│       ├── release.bat      # release.ps1のバッチラッパー
+│       ├── STAGES.md        # 入門ガイドの段階表（段階 N の辞書 = dic/01〜NN。.nar には入らない）
+│       ├── release.ps1      # ビルド＋配布パッケージ生成スクリプト（手元では動作確認用・リリース CI の build job も呼ぶ）
 │       ├── build.rs         # ビルドスクリプト
 │       ├── src/
 │       │   ├── lib.rs              # 公開API（画像＋surfaces.txt生成）
@@ -205,8 +208,8 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       │   ├── config_templates.rs # surfaces.txt生成
 │       │   └── scripts.rs          # ghosts/hello-pasta 辞書(.pasta)の検証テスト
 │       ├── ghosts/           # サンプルゴースト本体（SSOT・配布物一式）
-│       │   └── hello-pasta/  # 手書きSSOT(descript/pasta.toml/dic/install)＋生成物(dll/画像)
-│       └── tests/            # 統合テスト・配布ファイル構成検証
+│       │   └── hello-pasta/  # 手書きSSOT(descript/pasta.toml/dic/NN-*.pasta 12 段/install)＋生成物(dll/ライセンス表示/scripts は .gitignore 済み・画像は追跡)
+│       └── tests/            # 統合テスト・配布ファイル構成検証・全段階の検証（tutorial_stages_test.rs）
 ├── benches/                  # ベンチマークコード
 ├── editors/                  # エディタ拡張
 │   └── vscode/              # VSCode拡張（TypeScript + WASM統合）
@@ -225,10 +228,11 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 ├── book/                     # 利用者マニュアル（mdBook・GitHub Pages 公開）
 │   ├── book.toml            # mdBook 設定（language=ja, 検索有効, site-url）
 │   ├── package.json         # book ツールの npm 依存（vscode-textmate/oniguruma/jsdom・lockfile コミット・node_modules 非コミット）
-│   ├── src/                 # 章ソース（grammar/lua/getting-started/reference）
+│   ├── src/                 # 章ソース（grammar/lua/getting-started/reference/debug）
+│   │   ├── img/claudia/     # 台詞部品の顔アイコン 16 枚＋LICENSE.txt（ponapalt/claudia・Unlicense）
 │   │   └── internals/       # 内部設計パート（コントリビュータ向け・末尾パート）
-│   ├── theme/head.hbs       # 日本語 bigram 検索 tokenizer ＋ pasta ハイライト中和の override
-│   ├── tools/               # build-time Node（スキル references 生成 gen-skill-refs・リンク検証 link-check・bigram 索引再生成・pasta 構文ハイライト 等）
+│   ├── theme/               # head.hbs（日本語 bigram 検索 tokenizer ＋ pasta ハイライト中和の override ＋ Web フォント）・claudia.css（Claudia テーマ: light/navy の配色・部品・台詞・扉・狭幅・印刷）・claudia.js（テーマメニューを Auto/Light/Navy に絞る）
+│   ├── tools/               # build-time Node（スキル references 生成 gen-skill-refs・リンク検証 link-check・bigram 索引再生成・pasta 構文ハイライト・台詞部品 talk/（話し手と表情の登録簿 talk.mjs・ビルド後の吹き出し変換 talk-html.mjs）・検証 verify-*・テーマの対比テスト theme-test 等）
 │   └── book/                # mdbook build 生成物（.gitignore 済み・CI で再生成）
 ├── .kiro/                    # Kiro Spec-Driven設定
 │   ├── steering/            # ステアリング規約
@@ -237,7 +241,17 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       ├── completed/       # 完了仕様（アーカイブ）
 │       └── <spec-name>/     # 進行中仕様
 ├── .vscode/                 # VS Code 設定
-├── .github/                 # GitHub Actions, PR テンプレート
+├── .github/                 # GitHub Actions
+│   ├── workflows/
+│   │   ├── build.yml        # Rust/WASM ビルド・検査（push/PR・release.yml から workflow_call）
+│   │   ├── manual.yml       # 利用者マニュアルの検査と GitHub Pages 公開
+│   │   ├── release.yml      # リリース CI（vX.Y.Z タグ契機・OIDC で crates.io/Marketplace へ公開・GitHub Release 作成）
+│   │   └── release-setup-check.yml # リリース CI のセットアップ確認（手動起動・公開しない）
+│   ├── scripts/release/     # リリース CI の job 補助スクリプト（verify-tag/publish-crate/publish-vsix/release-notes/github-release の .ps1）
+│   └── release-ci-setup.md  # リリース CI の一回限りのセットアップ手順書
+├── release.bat              # crates/pasta_sample_ghost/release.ps1 のバッチラッパー（ダブルクリック用）
+├── release/                 # release.ps1 の出力先（.nar・pasta.dll.zip。.gitignore 済み・コミットしない）
+├── Cargo.lock               # 依存の解決結果（コミット対象・リリース CI の build で不変を検査）
 ├── README.md                # プロジェクト概要
 ├── LICENSE                  # ライセンス
 └── CLAUDE.md                # AI開発支援（プロジェクト指示・Kiro ワークフロー・コマンド一覧）
@@ -247,7 +261,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 - ルートクレート (`src/`) は削除済み。すべての実装コードは `crates/*/src/` 配下に配置。
 - ルートレベルの `tests/` と `examples/` も削除済み（Pure Virtual Workspace移行完了）
 - 各クレートは独自の `tests/` ディレクトリを持つことができる（例: pasta_dsl, pasta_core, pasta_lua, pasta_lsp, pasta_sample_ghost, pasta_shiori）
-- pasta_sample_ghost のサンプルゴースト hello-pasta は `ghosts/hello-pasta/` に完全な一式として直接配置（SSOT）。テキスト系（descript/pasta.toml/dic/install）は手書き正本、画像・DLL は生成物。`release.ps1` は生成物の配置と `.nar` パッケージングを担う（旧 dist-src/robocopy 方式は廃止）
+- pasta_sample_ghost のサンプルゴースト hello-pasta は `ghosts/hello-pasta/` に完全な一式として直接配置（SSOT）。テキスト系（descript/pasta.toml/dic/install）は手書き正本、画像・DLL は生成物。`release.ps1` は生成物の配置と `.nar`・`pasta.dll.zip` のパッケージングを担う（旧 dist-src/robocopy 方式は廃止）。生成物のうち DLL・ライセンス表示・`scripts/` と `release/` はコミットしない。配布物の公開はリリースタグの push で `release.yml` が行う
 - `CLAUDE.md` が AI 開発支援の指示（プロジェクト指示・Kiro 仕様駆動ワークフロー・コマンド一覧）を担う
 
 ## ファイル命名規則
@@ -290,7 +304,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 - 共有テストヘルパ: `<feature>_test_support.rs`（複数の `*_tests.rs` から `#[path]` 等で共有されるモック/ビルダ/フィクスチャ。テスト関数は置かない）
 
 ### 文法定義
-- Pest文法: `src/parser/pasta.pest`
+- Pest文法: `crates/pasta_dsl/src/parser/grammar.pest`
 
 ### ファイルサイズ方針（俯瞰可能性）
 

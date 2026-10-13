@@ -1,8 +1,10 @@
 # 内部設計の概要
 
-ごきげんよう。ここから先は、ゴーストを作る方ではなく、pasta そのものを読み・直す方のための舞台裏ですわ。
-トランスパイラが何を吐き、ランタイムがどう回り、SHIORI がどう応えるのか――わたくしが順に解き明かして差し上げます。
-覚悟はよろしくて？ さあ、エンジンルームの扉を開けて参りましょう。
+> 【不安】エンジンルームの扉を開ける前に、ひとつ気がかりがございますの。ゴーストを作りにいらした方が、うっかり迷い込んでいないかしら……。
+
+> 【アンソニー】ゴーストを作るだけでしたら、このパートは読まずとも済むそうでございます。
+
+> 【お辞儀】それなら、遠慮なくお迎えできますわね。ここから先は、pasta そのものを読み・直す方のための舞台裏。トランスパイラが何を吐き、ランタイムがどう回り、SHIORI がどう応えるのか――順に解き明かして差し上げます。
 
 ---
 
@@ -49,7 +51,7 @@ pasta ランタイムは、ゴーストの `.pasta` 辞書を Lua コードへ�
 
 - [トランスパイルパイプライン](transpiler.md) — パースから Lua コード生成まで。段階構成の定義、生成時最適化、トランスパイル結果キャッシュ
 - [シーン・単語レジストリとシーン検索](registry-search.md) — 辞書の登録と実行時の確定、前方一致と重複時の選択、ローカル優先の検索順
-- [ランタイム実行モデル](execution-model.md) — Lua VM の構築とモジュール登録、イベントからシーンのコルーチン実行、永続化、CT
+- [ランタイム実行モデル](execution-model.md) — Lua VM の構築とモジュール登録、イベントからシーンのコルーチン実行、永続化
 - [Lua ランタイム内部モジュール](internal-modules.md) — `pasta.*` 内部モジュールのモジュール単位のリファレンス（STORE・ACT・PROXY・SCENE・SAVE・`finalize_scene`・ユーティリティ）
 - [ローダ自己展開とモジュール解決](loader.md) — 起動の段階構成、設定読込、自己展開と版比較、ファイル検出とモジュール名、searcher
 - [SHIORI 層](shiori.md) — FFI 境界、アクターランタイム、イベント配送、非同期トーク、仮想イベントディスパッチャ（OnTalk・OnHour）、DLL のビルド構成
@@ -81,7 +83,7 @@ pasta ランタイムは、ゴーストの `.pasta` 辞書を Lua コードへ�
 | -- | -------------- |
 | [トランスパイルパイプライン](transpiler.md) | `crates/pasta_dsl/src/`、`crates/pasta_lua/src/transpiler.rs`、`crates/pasta_lua/src/code_gen/`、`crates/pasta_lua/src/context.rs`、`crates/pasta_lua/src/normalize.rs`、`crates/pasta_lua/src/string_literalizer.rs`、`crates/pasta_lua/src/config.rs`、`crates/pasta_lua/src/error.rs`、`crates/pasta_lua/src/loader/cache.rs`、`crates/pasta_lua/src/loader/process.rs` |
 | [シーン・単語レジストリとシーン検索](registry-search.md) | `crates/pasta_core/src/`、`crates/pasta_lua/src/search/`、`crates/pasta_lua/src/runtime/finalize.rs`、`crates/pasta_lua/pasta_scripts/pasta/scene.lua`、`crates/pasta_lua/pasta_scripts/pasta/word.lua` |
-| [ランタイム実行モデル](execution-model.md) | `crates/pasta_lua/src/runtime/`、`crates/pasta_lua/pasta_scripts/pasta/`、`crates/pasta_lua/pasta_scripts/ct.lua` |
+| [ランタイム実行モデル](execution-model.md) | `crates/pasta_lua/src/runtime/`、`crates/pasta_lua/pasta_scripts/pasta/` |
 | [Lua ランタイム内部モジュール](internal-modules.md) | `crates/pasta_lua/pasta_scripts/pasta/store.lua`、`crates/pasta_lua/pasta_scripts/pasta/act.lua`、`crates/pasta_lua/pasta_scripts/pasta/shiori/act.lua`、`crates/pasta_lua/pasta_scripts/pasta/actor.lua`、`crates/pasta_lua/pasta_scripts/pasta/scene.lua`、`crates/pasta_lua/pasta_scripts/pasta/save.lua`、`crates/pasta_lua/pasta_scripts/pasta/init.lua`、`crates/pasta_lua/pasta_scripts/pasta/word.lua`、`crates/pasta_lua/pasta_scripts/pasta/buf.lua`、`crates/pasta_lua/pasta_scripts/pasta/lua_version.lua` |
 | [ローダ自己展開とモジュール解決](loader.md) | `crates/pasta_lua/src/loader/`、`crates/pasta_lua/build.rs`、`crates/pasta_lua/build_zip.rs`、`crates/pasta_lua/src/runtime/searcher.rs`、`crates/pasta_lua/src/runtime/module_registry.rs`、`crates/pasta_lua/src/runtime/runtime_config.rs`、`crates/pasta_lua/pasta_scripts/main.lua`、`crates/pasta_lua/pasta_scripts/pasta/config.lua` |
 | [SHIORI 層](shiori.md) | `crates/pasta_shiori/src/`、`crates/pasta_shiori/build.rs`、`crates/pasta_shiori/Cargo.toml`、`crates/pasta_lua/src/presentation/`、`crates/pasta_lua/src/runtime/renderer_injection.rs`、`crates/pasta_lua/pasta_scripts/pasta/shiori/`、`.cargo/config.toml` |
@@ -97,5 +99,8 @@ pasta ランタイムは、ゴーストの `.pasta` 辞書を Lua コードへ�
 
 ---
 
-全体の地図は頭に入りまして？ フンッ、迷子になっても知りませんわよ……と言いたいところですけれど、迷ったらいつでもこの章へ戻っていらっしゃい。
-さあ、まずはトランスパイラの心臓部から、熱く参りましょう！
+> 【にっこり】全体の地図は頭に入りまして？ 迷ったら、いつでもこの章へ戻っていらっしゃい。さあ、まずはトランスパイラの心臓部から参りましょう！
+
+> 【アンソニー】道中、古い設計書と今のコードが食い違っておりましたら、どちらを信じればよろしいので？
+
+> 【目閉じ】答えは一つ、いま動いているコードですの。このパートは、すべてコードと照らし合わせて書いてありますのよ。

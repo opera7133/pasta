@@ -37,7 +37,7 @@
 | アクション行（発言）         | `transpiler_basic_test.rs`                     | ✅ 完了 | キャラクター発言                                |
 | Luaコードブロック            | `actor_code_block_test.rs`                     | ✅ 完了 | 関数定義                                        |
 | バイトオフセット             | `span_byte_offset_test.rs`                     | ✅ 完了 | エラー位置特定                                  |
-| さくらスクリプト記号タグ     | `sakura_symbol_tag_test.rs`                    | ✅ 完了 | `-+*?&` 5文字タグパース（7テスト）              |
+| さくらスクリプト記号タグ     | `sakura_symbol_tag_test.rs`                    | ✅ 完了 | `-+*?&` 5文字タグパース（7テスト）、SSP にそろえた読み方（名前 1 文字・数字付きの形・引数のエスケープと先頭の引用・`\%`・囲み・1 行の中だけで読む・単語の値）（paragraph-break-tag-only-talk） |
 | キューコマンド行（！/!）     | `cue_cmd_test.rs`                              | ✅ 完了 | 63テスト（AST型・PEG文法・パース・推定）        |
 | プロパティスコープ（＄％）   | `property_scope_test.rs`                       | ✅ 完了 | 16テスト（property-dsl-extension）              |
 | 選択肢行（＠？）             | `choice_line_test.rs`                          | ✅ 完了 | 選択肢行パース（省略形・括弧形・半角対応）      |
@@ -45,6 +45,7 @@
 | 式文（＄＝expr）             | `var_set_none_test.rs`                         | ✅ 完了 | 8テスト（名前なしVarSet）                       |
 | ParseError 公開API           | `error_api_test.rs`                            | ✅ 完了 | 16テスト（コンストラクタ・Display・行列位置）   |
 | 式AST（二項演算・括弧）      | `expr_parse_test.rs`                           | ✅ 完了 | 14テスト（左結合・全角数値・キーワード引数）    |
+| 連結演算子（＆/&）           | `concat_parse_test.rs`                         | ✅ 完了 | 23テスト（全角半角・位置ごとの受理・属性/台詞の不変・パースエラーの切り分け）（string-concat-operator） |
 
 ### 2.2 Registry層テスト（シーン/単語テーブル）
 
@@ -58,6 +59,9 @@
 | finalize_scene処理         | `finalize_scene_test.rs`                                         | ✅ 完了 | シーン初期化                |
 | SCENE.search() API         | `scene_search_test.rs`                                           | ✅ 完了 | 14テスト                    |
 | Registry境界回帰テスト     | `scene_registry.rs`<br>`word_registry.rs`<br>`scene_table_candidate_tests.rs`<br>`scene_table_resolve_filter_tests.rs`<br>`word_table_test.rs`<br>`random.rs`<br>`error.rs`（各内テスト） | ✅ 完了 | 38テスト（merge_from/register_global_raw/解決境界/セレクタ契約/エラー表示文言） |
+| セレクタの指定列           | `random.rs`（インライン）<br>`scene_table_candidate_tests.rs`<br>`word_table_test.rs`<br>`tests/search/module_test.rs` | ✅ 完了 | 整数を候補の並びの位置として巡ごとに当てはめる（モックの並べ替え・シーン/単語の 2 巡目・Lua 結合 8。範囲外・重複・負の整数・既定への復帰）（search-selector-indices） |
+| 記号を含む名前の照合       | `search/context.rs`（インライン）<br>`symbol_name_search_test.rs` | ✅ 完了 | 登録と検索が同じ照合規則を共有（単体8＋結合10。Call・SCENE.search・SHIORI応答・選択肢・アクター単語） |
+| 登録名の形式と照合相手     | `scene_registry.rs`・`scene_table_candidate_tests.rs`・`finalize.rs`・`context.rs`・`scope_gen_tests.rs`・`scene_join_tests.rs`（インライン）<br>`runtime/scene_identity_format_test.rs`<br>`scene_identity_index_test.rs`<br>`lua_specs/kick_*_test.lua` | ✅ 完了 | 登録名 `名前_通し番号` の作成・分割の往復、通し番号を除いた検索キー、確定時の登録順、ローカルの通し番号の共有、定義元ファイルごとのデバッガ索引、キックの完全一致（scene-identity-format） |
 
 ### 2.3 Transpiler層テスト（Lua変換）
 
@@ -69,6 +73,9 @@
 | CueCommandパススルー   | `cue_command_passthrough_test.rs`                                                           | ✅ 完了 | 5テスト（Lua変換スキップ検証）     |
 | 複数キー単語登録       | `transpiler.rs`（インライン）                                                               | ✅ 完了 | 7テスト（登録・Lua出力・後方互換） |
 | 動的単語参照（＠＄）   | `transpiler/dynamic_word_ref_test.rs`<br>`lua_specs/act_dynamic_ref_test.lua`<br>`runtime/syntax_test.rs`（E2E）<br>`pasta_lsp/tests/dynamic_ref_token_test.rs` | ✅ 完了 | 生成コード・スナップショット・マニュアル例の読み込み・キー解決と検索段・E2E・LSP トークン |
+| 書き間違いの実行時安全性 | `transpiler/runtime_safety_test.rs`<br>`lua_specs/act_runtime_safety_test.lua`<br>`code_gen/element_gen_tests.rs`<br>`sakura_script/tokenizer.rs`・`line_breaker.rs`（インライン）<br>`pasta_shiori/tests/codegen_runtime_safety_e2e_test.rs`（E2E） | ✅ 完了 | 未定義の `＠＊`・未登録アクター・act メンバー名のアクター・数値にできない算術・`\\` の生成形と実行（算術の組み直しが旧来の平らな式と同値である関門を含む）（dsl-codegen-runtime-safety） |
+| 文字列の連結（＆）     | `code_gen/expr_gen_tests.rs`<br>`transpiler/runtime_safety_test.rs`<br>`transpiler/source_map_seam_test.rs`<br>`lua_specs/act_concat_test.lua`<br>`pasta_shiori/tests/codegen_runtime_safety_e2e_test.rs`（E2E） | ✅ 完了 | 3 段の組み直しの生成形・平らな Lua 式と同値の関門・行対応・`PASTA.str` の値ごとの扱いと警告（nil は黙って空文字列・演算は値なしを作らない）・SHIORI 経由で 500 にならないこと（string-concat-operator、expr-nil-coercion） |
+| Call の生成形（途中／末尾 × 静的／動的） | `code_gen/element_gen_tests.rs`<br>`transpiler/scene_test.rs`<br>`transpiler/dynamic_call_test.rs`<br>`transpiler/record_wiring_element_test.rs`<br>`transpiler/snapshot_test.rs`・`final_regression_test.rs`（スナップショット） | ✅ 完了 | 途中の Call は `act:call_restore(…)`・末尾は `return act:call(…)`、動的コールのキーは `act:call_key(値[, 変数パス／関数の表記])`（`tostring` しない）。途中の Call の 1 行がその `.pasta` 行へ対応づくこと（call-execution-correctness） |
 | エンコーディング       | `pasta_lua_encoding_test.rs`                                                                | ✅ 完了 | 文字エンコード                     |
 | プロパティLua変換      | `property_scope_codegen_test.rs`                                                            | ✅ 完了 | 10テスト（property-dsl-extension） |
 | プロパティトークン保全 | `property_token_preservation_test.rs`                                                       | ✅ 完了 | 3テスト（property-dsl-extension）  |
@@ -92,17 +99,21 @@
 | CONFIG.actor→STORE.actors初期化       | `config_actors_initialization_test.rs`                            | ✅ 完了 | 8テスト（pasta.tomlアクター設定）                                |
 | SHIORIレスポンスビルダー              | `shiori_res_test.rs`                                              | ✅ 完了 | 14テスト                                                         |
 | SHIORIイベントディスパッチ            | `shiori_event_dispatch_test.rs`<br>`shiori_event_handler_test.rs` | ✅ 完了 | 27テスト（2ファイルに分割）                                      |
-| SHIORI_ACT さくらスクリプト生成       | `shiori_act_test.lua`                                             | ✅ 完了 | 43テスト（日時転記 transfer_date_to_var 6テストを含むファイル全体実測 — 旧 47＋7 の二重計上を是正） |
-| ACT トークンバッファ（親クラス）      | `act_test.lua`                                                    | ✅ 完了 | 36テスト（act-token-buffer-refactor）                            |
-| ACT トークングループ化                | `act_grouping_test.lua`                                           | ✅ 完了 | 25テスト（actor-talk-grouping、sakura_script grouping追加）      |
+| SHIORI_ACT さくらスクリプト生成       | `shiori_act_test.lua`                                             | ✅ 完了 | 58テスト（ファイル全体実測。act-token-grouping-fix のバイト比較 13 件を含む） |
+| ACT トークンバッファ（親クラス）      | `act_test.lua`                                                    | ✅ 完了 | 37テスト（act-token-buffer-refactor、未登録アクターの set_spot 無視を追加）                            |
+| ACT トークングループ化                | `act_grouping_test.lua`                                           | ✅ 完了 | 29テスト（actor-talk-grouping、sakura_script grouping、act-token-grouping-fix のグループの開閉 4 件） |
 | sakura_builder トークン変換           | `sakura_builder_test.lua`                                         | ✅ 完了 | 52テスト（ファイル全体実測 — スポット/sakura_script/choice/string-buffer 系を含む） |
 | RuntimeConfig libs配列                | `runtime_test.rs`（外部化）                                       | ✅ 完了 | 17テスト（外部化済み）                                           |
 | LuaConfig TOML設定                    | `loader_config_test.rs`（外部化）                                 | ✅ 完了 | 6テスト（外部化済み）                                            |
 | さくらスクリプトウェイト挿入          | `sakura_script_basic_test.rs`<br>`sakura_script_output_test.rs`   | ✅ 完了 | 22テスト（2ファイルに分割）                                      |
 | さくらスクリプト記号タグトークナイズ  | `tokenizer.rs` 内テスト                                           | ✅ 完了 | 6テスト（`-+*?&` タグ認識）                                      |
-| EVENT.fire コルーチン対応             | `event_coroutine_test.lua`                                        | ✅ 完了 | 16テスト（resume_until_valid含む）                               |
+| タグの読み取りの 3 か所の一致         | `sakura_script/conformance_test.rs`<br>`tokenizer.rs` 内 `test_tag_pattern_table` | ✅ 完了 | 38 事例の表を Rust・Lua（`APPEARANCE.tag_at`）・DSL の 3 つに通す＋正規表現の表 31 事例（paragraph-break-tag-only-talk） |
+| タグ・エスケープ・囲みとウェイト・改行 | `sakura_script/edge_case_test.rs`<br>`sakura_script/budoux_test.rs` | ✅ 完了 | タグ直後の字のウェイト・`\%`/囲み/引数の中に何も入らない・単位にならない `\` の直後にウェイトを入れない（paragraph-break-tag-only-talk） |
+| 段落区切りの字の判定                  | `sakura_builder_test.lua`<br>`shiori_act_test.lua`<br>`appearance_test.lua` | ✅ 完了 | 申し送り (a)(b)・字の境界 28 件・保留中の改行・スクリプト API 経路、外見の観測の正確な名前の判定と囲み（paragraph-break-tag-only-talk） |
+| EVENT.fire コルーチン対応             | `event_coroutine_test.lua`                                        | ✅ 完了 | 17テスト（resume_until_valid含む、callback-resume-unification追加1） |
 | resume_until_valid nil yieldスキップ  | `event_coroutine_test.lua`                                        | ✅ 完了 | 6テスト（coroutine-resume-loop）                                 |
-| CALLBACK モジュール（非同期通信基盤） | `callback_module_test.lua`                                        | ✅ 完了 | 21テスト（shiori-async-talk）                                    |
+| CALLBACK モジュール（非同期通信基盤） | `callback_module_test.lua`                                        | ✅ 完了 | 34テスト（shiori-async-talk、callback-resume-unification追加13） |
+| コールバック再開・掃引・戻り値の入口回帰 | `shiori_entry_test.lua`                                           | ✅ 完了 | 17テスト（callback-resume-unification）                          |
 | get_property バリデーション・タグ発行 | `get_property_test.lua`                                           | ✅ 完了 | 18テスト（shiori-async-talk）                                    |
 | set_property バリデーション・反映     | `set_property_test.lua`                                           | ✅ 完了 | 18テスト                                                         |
 | REQ→変数転記                          | `transfer_req_to_var_test.lua`                                    | ✅ 完了 | 8テスト                                                          |
@@ -133,8 +144,10 @@
 | トランスパイル失敗中止                | `lua_passthrough_test.rs`                                         | ✅ 完了 | 2テスト（load-error-logging）                                    |
 | ログファイル名固定（Rotation::NEVER） | `logger.rs`                                                       | ✅ 完了 | 1テスト（load-error-logging）                                    |
 | load失敗→requestエラー伝搬            | `shiori_request_tests.rs`                                         | ✅ 完了 | 1テスト（load-error-logging）                                    |
-| 非同期コールバック統合（SHIORI層）    | `async_callback_simple_test.rs` / `async_callback_chain_test.rs`  | ✅ 完了 | 12テスト（shiori-async-talk、property-dsl-extension追加2テスト） |
-| OnChoiceSelectEx 自動ルーティング     | `choice_select_test.lua`（Luaテストスイート）                     | ✅ 完了 | 選択肢コールバック→シーン自動解決                                |
+| 非同期コールバック統合（SHIORI層）    | `async_callback_simple_test.rs` / `async_callback_chain_test.rs`  | ✅ 完了 | 13テスト（shiori-async-talk、property-dsl-extension追加2テスト、callback-resume-unification追加1） |
+| OnChoiceSelectEx 自動ルーティング     | `choice_select_test.lua`（Luaテストスイート）                     | ✅ 完了 | 選択肢コールバック→シーン自動解決（Reference2 を最初の探索範囲に使い、不明・無しは直前のグローバルシーンへ。call-execution-correctness 追加3） |
+| Call の文脈の復元・失敗表記・動的キー | `act_call_restore_test.lua`                                       | ✅ 完了 | 36テスト（`act:restore_scene`・`act:call_restore`・`act:failure` とさくらスクリプトまでの出力（スコープ切替をはさむ位置と段落区切りの改行の位置を含む。失敗表記にウェイトが入らないこと）・`act:call_key` の値ごとの判定・`act:call` の失敗の分岐・式の関数呼び出し／`＠＊関数`／単語の関数ハンドラの後の文脈）（call-execution-correctness） |
+| 選択肢の探索範囲（`\q` 第 3 引数）   | `act_choice_test.lua`<br>`sakura_builder_test.lua`                | ✅ 完了 | 3＋5テスト（選択肢トークンに出したグローバルシーン名を載せる・`\q[表示,ジャンプ先,探索範囲]` の出力とエスケープ・On／script: では付けない）（call-execution-correctness） |
 
 ### 2.5 LSP層テスト（Language Server）
 
@@ -147,7 +160,8 @@
 | UTF-8→UTF-16位置変換             | `utf16_conversion_test.rs`    | ✅ 完了 | 12テスト（サロゲートペア含む）                    |
 | LSPライフサイクル統合            | `lsp_lifecycle_test.rs`       | ✅ 完了 | 4テスト                                           |
 | ドキュメント同期                 | `document_sync_test.rs`       | ✅ 完了 | 4テスト（増分更新含む）                           |
-| Diagnostics通知                  | `diagnostics_test.rs`         | ✅ 完了 | 6テスト                                           |
+| Diagnostics通知                  | `diagnostics_test.rs`         | ✅ 完了 | 8テスト（連結を含む式の診断を含む）               |
+| 二項演算の連鎖トークン           | `binary_chain_token_test.rs`  | ✅ 完了 | 13テスト（左から1回走査・文字列内/＄＊/×÷・連結・属性の DECORATOR 不変） |
 | パーサークラッシュ回復           | `crash_recovery_test.rs`      | ✅ 完了 | 4テスト（catch_unwind保護）                       |
 | 部分パーストークン提供           | `partial_token_test.rs`       | ✅ 完了 | 5テスト（Phase 1→2→3フォールバック）              |
 | キューコマンドトークン生成       | `cue_command_token_test.rs`   | ✅ 完了 | 10テスト（4形式・全角半角・引数種別・混在・診断） |
@@ -162,7 +176,7 @@
 
 | 機能                              | テストファイル                                | 状態   | 説明                                                       |
 | --------------------------------- | --------------------------------------------- | ------ | ---------------------------------------------------------- |
-| TextMate文法（全角/半角マーカー） | `editors/vscode/src/test/tmGrammar.test.ts`   | ✅ 完了 | 27テスト（9構文×全角半角+アクション行ほか）                |
+| TextMate文法（全角/半角マーカー） | `editors/vscode/src/test/tmGrammar.test.ts`   | ✅ 完了 | 27テスト（9構文×全角半角+アクション行ほか）、タグ・`\%`・囲みの色分け 4 件（paragraph-break-tag-only-talk） |
 | デバッグアダプタファクトリ        | `editors/vscode/src/test/debugAdapterFactory.test.ts` | ✅ 完了 | 16テスト（attach 解決・ポート既定値）             |
 | ソース表示トグル                  | `editors/vscode/src/test/sourcePresentationToggle.test.ts` | ✅ 完了 | 17テスト                                     |
 | VSCodeモジュール直接テスト        | `editors/vscode/src/test/vscodeModules.test.ts` | ✅ 完了 | 45テスト（esbuild --alias:vscode モックで実モジュール検証。旧 wasmBridge.test.ts / integration.test.ts は 3.57 で本テストへ統合・削除済み） |
@@ -185,6 +199,7 @@
 | Sample Ghost 構成検証         | `dist_src_validation_test.rs::test_ghost_directory_structure`                                       | ✅ 完了 | 1テスト（ghosts/hello-pasta/ 8ファイル存在確認）※テストファイル名は旧称                                    |
 | Sample Ghost 画像構造検証     | `integration_test.rs::test_generated_images_structure`                                              | ✅ 完了 | 1テスト（shell/master/*.png 18枚＋surfaces.txt）                                                           |
 | チェイントーク E2E            | `runtime_scene_test.rs`                                                                             | ✅ 完了 | 2テスト（yield-continuation-token Pasta→Lua→実行）                                                         |
+| Call の実行の正しさ E2E       | `call_execution_correctness_e2e_test.rs`<br>`fixtures/call_execution_correctness/dic/`（`characterization`・`mid_call_context`・`choice_scope`・`failed_call`・`basic`） | ✅ 完了 | 36テスト（現行挙動の特性化・途中の Call から戻った後の文脈（入れ子・チェイントーク再開・Lua／`GLOBAL`／act のメソッドのターゲット・動的参照）・選択肢の探索範囲・失敗した Call の失敗表記と警告）（call-execution-correctness） |
 
 ---
 
@@ -313,4 +328,4 @@
 
 **参照**:
 - [SOUL.md](SOUL.md) - プロジェクトの憲法
-- [.kiro/specs/soul-document/gap-analysis.md](.kiro/specs/soul-document/gap-analysis.md) - ギャップ分析レポート
+- [.kiro/specs/completed/soul-document/gap-analysis.md](.kiro/specs/completed/soul-document/gap-analysis.md) - ギャップ分析レポート

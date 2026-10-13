@@ -5,7 +5,7 @@
 ### 言語・ランタイム
 - **Rust 2024 edition**: メインコンパイラ言語
 - **LuaJIT 2.1 (mlua 0.11)**: Luaバックエンドスクリプト実行
-- **Pest 2.8.6**: PEGパーサー生成器（`pasta.pest`文法定義）
+- **Pest 2.8.6**: PEGパーサー生成器（`grammar.pest`文法定義）
 
 ### ワークスペース構成
 - **pasta_dsl**: DSLパーサー層（Pest PEG → AST変換）
@@ -42,7 +42,7 @@
 - **md5 0.8**: ビルド時の基準ダイジェスト算出（pasta_scripts 自己展開のドリフト検知、build/dev-dependency。ランタイムはマーカー文字列比較のみで md5 不使用）
 - **budouy 0.2.2**: 日本語改行位置推定（BudouX、vendored-models）
 - **unicode-width 0.2.2**: Unicode文字幅計算
-- **socket2 0.5**: debug transport 待受ソケットの `SO_REUSEADDR` 設定・非ブロック化（reload 時の再バインド堅牢化、cross-platform）
+- **socket2 0.5**: debug transport 待受ソケットの `SO_REUSEADDR` 設定（Windows 以外。Windows では二重 bind を許してしまうため立てない）・非ブロック化（reload 時の再バインド堅牢化）
 - **tracing 0.1 / tracing-appender 0.2 / tracing-subscriber 0.3**: ロギング・診断
 - **windows-sys 0.61**: Windows API（Shift_JISエンコーディング等、cfg(windows)）
 - **luacheck v1.2.0**: 静的解析ツール（scriptlibs/）
@@ -166,9 +166,9 @@ pasta (workspace)
 - 依存関係ライセンス: 互換性確認済み
 
 ### 公開ポリシー
-- `publish = true` in Cargo.toml
-- crates.io公開予定
-- API安定化後にリリース
+- `publish = true` in Cargo.toml（`pasta_sample_ghost` は `publish = false`）
+- crates.io へ公開済み
+- 公開はリリースタグ `vX.Y.Z` の push で `release.yml` が Trusted Publishing で行う
 
 ## デプロイメント
 
@@ -192,14 +192,21 @@ cargo test -p pasta_lua     # pasta_luaテスト
 
 ### CI/CD
 - **GitHub Actions**: `.github/workflows/build.yml`（Rust/WASM）
-  - push/PR/手動実行トリガー
+  - push/PR/手動実行トリガー＋`workflow_call`（`release.yml` の gate から同じ検査を呼ぶ）
   - **DLLビルド**: マトリックスビルド: x86 (`i686-pc-windows-msvc`) + x64 (`x86_64-pc-windows-msvc`)
   - **WASMビルド**: `pasta_lsp` を `wasm32-unknown-unknown` ターゲットでビルド（10MBサイズ上限チェック付き）
   - Rust キャッシュ: `Swatinem/rust-cache@v2`
   - アーティファクト: `pasta-dll-x86`, `pasta-dll-x64`（7日間保持）
 - **GitHub Actions**: `.github/workflows/manual.yml`（利用者マニュアル公開・build.yml と独立）
-  - `book/**`・`.claude/skills/pasta-ghost-authoring/**`・`.claude/skills/pasta-lua-coding/**` 変更時に起動。スキル references 鮮度照合（`gen-skill-refs.mjs --check`）→ npm ci(book) → mdbook build → pasta 構文ハイライト → bigram 索引再生成 → リンク検証（`link-check.mjs`）→ tutorial-check → cargo test 構文ガード → verify-static/search/content → GitHub Pages デプロイ
+  - `book/**`・`.github/workflows/manual.yml`・`.claude/skills/pasta-ghost-authoring/**`・`.claude/skills/pasta-lua-coding/**`・`crates/*/README.md`・`crates/pasta_sample_ghost/ghosts/hello-pasta/ghost/master/dic/**` の変更時に起動。スキル references 鮮度照合（`gen-skill-refs.mjs --check`）→ npm ci(book) → mdbook build → pasta 構文ハイライト → 台詞部品の変換（`talk/talk-html.mjs`）→ bigram 索引再生成 → リンク検証（`link-check.mjs`）→ tutorial-check → cargo test 構文ガード → verify-static/search（`--self-test` 付き）/content → ツール自己テスト（`book/tools` の `*-test.mjs` 全件）→ 旧版の生成（固定コミット `CLASSIC_REF` の `book/` を旧版のツールで `book/book/classic/` へ。新版の検査の後・失敗で中断。PR でも実行）→ GitHub Pages デプロイ（旧版は `https://ekicyou.github.io/pasta/classic/`）
   - permissions: `pages: write` / `id-token: write` / `contents: read`。Pages 初回は repo Settings で手動有効化が必要
+- **GitHub Actions**: `.github/workflows/release.yml`（リリース CI・release-ci）
+  - リリースタグ `vX.Y.Z`（数字 3 つ）の push だけで起動。job は verify（タグ・ワークスペース版・`package.json` 版の一致と main からの到達性）→ gate（`build.yml` を `workflow_call`）→ build → publish-crates／publish-vsce → github-release → report
+  - **成果物**: build が CI 上でソースから `pasta.dll.zip`（`pasta.dll`＋`THIRD_PARTY_LICENSES.txt`）・`hello-pasta.nar`・`pasta-vscode-X.Y.Z.vsix` を作り、artifact `release-assets` で後続 job に渡す。github-release が GitHub Release（題名 `pasta vX.Y.Z`・リリースノートはコミット履歴から生成）を作って 3 つを添付する
+  - **認証は OIDC**: crates.io は Trusted Publishing、Marketplace は Azure のマネージド ID（フェデレーション資格情報）。長期のトークン（crates.io の API トークン・Marketplace の PAT）は使わず、開発機（`CARGO_REGISTRY_TOKEN`・`VSCE_PAT`）にも GitHub の secret にも置かない。crates.io の短命トークンは job の中で auth の直後に発行し、直後の publish step だけに渡す。crates.io・Marketplace の公開 job（publish-crates・publish-vsce）は environment `release` で走る
+  - 公開先ごとに「公開済みなら飛ばす」冪等な処理で、失敗した job の再実行で続きから回復する。job の補助スクリプトは `.github/scripts/release/*.ps1`（pwsh 7）
+  - 一回限りのセットアップ手順は `.github/release-ci-setup.md`、その確認は `.github/workflows/release-setup-check.yml`（手動起動・公開しない）。リリース手順は `crates/pasta_sample_ghost/RELEASE.md`
+  - 手元の `release.ps1`・`npm run package` の成果物は動作確認用で、コミットしない（`release/` とサンプルゴーストの生成物は `.gitignore` 済み）。`Cargo.lock` はコミットする
 
 ## 利用者マニュアル（ドキュメントサイト `book/`）
 
@@ -248,15 +255,14 @@ cargo test -p pasta_lua     # pasta_luaテスト
 function SCENE.func_name(act)
     local save, var = act:init_scene(SCENE)  -- 必須
     act:talk(act.アクター名.actor, "セリフ")
-    act:yield()
 end
 ```
 
 ### SHIORIハンドラ登録パターン
 
 ```lua
-REG.OnBoot = function(req)
-    return RES.ok("value0")
+REG.OnBoot = function(act)
+    return "\\0\\s[0]起動しました。\\e"  -- Value にする文字列を返す（RES で作った応答全体を返すと、包まずにそのまま応答になる）
 end
 ```
 
@@ -269,8 +275,8 @@ end
 local value = act:get_property("baseware.version")
 ```
 
-- `pasta.shiori.callback` モジュールがID管理・タイムアウト・コルーチンresume を担当
-- OnSecondChange で `CALLBACK.resume_pending()` が保留コルーチンを再開
-- OnNotifyCallbackResponse でSSPからの応答を受信・格納
+- `pasta.shiori.event.callback` モジュールが ID 管理・待機の登録・タイムアウトを担当し、再開は通常のイベントと同じ `EVENT.drive` に任せる
+- 応答イベント（`OnPastaCallBack{N}`）で待機中のシーンを再開し、出力が応答になる
+- OnSecondChange の既定ハンドラが期限切れの待機を掃引する（理由付きのタイムアウトは `X-Error-Reason` 付きの 500 を返す）
 
 詳細: `.claude/skills/pasta-lua-coding/SKILL.md`

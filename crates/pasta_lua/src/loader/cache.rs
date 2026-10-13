@@ -13,6 +13,9 @@ use tracing::{debug, info, warn};
 /// Cache version file name.
 const CACHE_VERSION_FILE: &str = ".cache_version";
 
+/// Scene alias table fingerprint marker file name.
+const SCENE_ALIAS_MARKER_FILE: &str = ".scene_alias";
+
 /// Current cache version from Cargo.toml.
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -47,24 +50,39 @@ impl CacheManager {
         }
     }
 
-    /// Prepare the cache directory with version checking.
+    /// Prepare the cache directory with version and scene alias table checking.
     ///
-    /// If the pasta_lua version has changed, all cache files are cleared.
-    /// Otherwise, existing cache is preserved for incremental updates.
+    /// If the pasta_lua version or the scene alias table fingerprint has changed
+    /// (a missing `.scene_alias` marker counts as changed), all cache files are
+    /// cleared and both markers are rewritten. Otherwise, existing cache is
+    /// preserved for incremental updates.
+    ///
+    /// # Arguments
+    /// * `alias_fingerprint` - `SceneAliasTable::fingerprint()` of the effective table
     ///
     /// # Returns
     /// * `Ok(())` - Directory prepared successfully
     /// * `Err(LoaderError::CacheDirectoryError)` - Directory operation failed
-    pub fn prepare_cache_dir(&self) -> Result<(), LoaderError> {
+    pub fn prepare_cache_dir(&self, alias_fingerprint: &str) -> Result<(), LoaderError> {
         let version_file = self.cache_dir.join(CACHE_VERSION_FILE);
+        let marker_file = self.cache_dir.join(SCENE_ALIAS_MARKER_FILE);
 
-        // Check version if cache directory exists
+        // Check version and alias fingerprint if cache directory exists
         if version_file.exists() {
             let cached_version = fs::read_to_string(&version_file)
                 .map_err(|e| LoaderError::cache_directory(&version_file, e))?;
 
-            if cached_version.trim() == CURRENT_VERSION {
-                debug!(version = %CURRENT_VERSION, "Cache version matches, preserving cache");
+            if cached_version.trim() != CURRENT_VERSION {
+                info!(
+                    reason = "pasta_lua version changed",
+                    old_version = %cached_version.trim(),
+                    new_version = %CURRENT_VERSION,
+                    "Cache version mismatch, clearing all cache"
+                );
+            } else if Self::read_alias_marker(&marker_file)?.as_deref() != Some(alias_fingerprint) {
+                info!(reason = "scene alias table changed", "Clearing all cache");
+            } else {
+                debug!(version = %CURRENT_VERSION, "Cache version and scene alias table match, preserving cache");
                 // Ensure scene directory exists (idempotent)
                 let scene_dir = self.cache_dir.join("pasta/scene");
                 fs::create_dir_all(&scene_dir)
@@ -72,12 +90,6 @@ impl CacheManager {
                 return Ok(());
             }
 
-            // Version mismatch → clear all cache
-            info!(
-                old_version = %cached_version.trim(),
-                new_version = %CURRENT_VERSION,
-                "Cache version mismatch, clearing all cache"
-            );
             if self.cache_dir.exists() {
                 fs::remove_dir_all(&self.cache_dir)
                     .map_err(|e| LoaderError::cache_directory(&self.cache_dir, e))?;
@@ -88,12 +100,24 @@ impl CacheManager {
         let scene_dir = self.cache_dir.join("pasta/scene");
         fs::create_dir_all(&scene_dir).map_err(|e| LoaderError::cache_directory(&scene_dir, e))?;
 
-        // Write version file
+        // Write version file and scene alias marker
         fs::write(&version_file, CURRENT_VERSION)
             .map_err(|e| LoaderError::cache_directory(&version_file, e))?;
+        fs::write(&marker_file, alias_fingerprint)
+            .map_err(|e| LoaderError::cache_directory(&marker_file, e))?;
 
-        debug!(version = %CURRENT_VERSION, "Created cache directory with version file");
+        debug!(version = %CURRENT_VERSION, "Created cache directory with version file and scene alias marker");
         Ok(())
+    }
+
+    /// Read the scene alias marker. `Ok(None)` when the marker does not exist.
+    fn read_alias_marker(marker_file: &Path) -> Result<Option<String>, LoaderError> {
+        if !marker_file.exists() {
+            return Ok(None);
+        }
+        fs::read_to_string(marker_file)
+            .map(Some)
+            .map_err(|e| LoaderError::cache_directory(marker_file, e))
     }
 
     /// Check if a source file needs transpilation.
@@ -164,14 +188,18 @@ impl CacheManager {
         let cache_path = self.source_to_cache_path(source_path);
         let module_name = self.source_to_module_name(source_path);
 
-        // Validate cache path stays within cache directory (prevent directory traversal).
-        // `Path::starts_with` alone is lexical: a path like
-        // `{cache_dir}/pasta/scene/../../../evil.lua` passes the prefix check but
-        // escapes after OS resolution. Reject any `..` component in the remainder.
-        let escapes_cache_dir = match cache_path.strip_prefix(&self.cache_dir) {
-            Ok(rel) => rel.components().any(|c| matches!(c, Component::ParentDir)),
-            Err(_) => true,
-        };
+        // Reject sources outside base_dir or with `..` components (directory traversal).
+        // The cache path is derived from the module name, which maps `.` to `_`, so such
+        // a source would not escape the cache directory but land under a mangled name.
+        let relative = source_path
+            .strip_prefix(&self.base_dir)
+            .unwrap_or(source_path);
+        let escapes_cache_dir = relative.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        });
         if escapes_cache_dir {
             return Err(LoaderError::cache_write(
                 &cache_path,
@@ -216,27 +244,24 @@ impl CacheManager {
         let stem = Path::new(without_prefix).with_extension("");
         let stem_str = stem.to_string_lossy();
 
-        // Convert path separators to dots, hyphens to underscores
-        let module_path = stem_str.replace(['/', '\\'], ".").replace('-', "_");
+        // Dots and hyphens to underscores (`require` maps every `.` to a path
+        // separator), then path separators to dots
+        let module_path = stem_str.replace(['.', '-'], "_").replace(['/', '\\'], ".");
 
         format!("pasta.scene.{}", module_path)
     }
 
     /// Convert source path to cache file path.
     ///
+    /// Derived from [`Self::source_to_module_name`] the same way `require` resolves
+    /// a module name, so the two cannot diverge.
+    ///
     /// # Example
     /// `dic/baseware/system.pasta` → `{cache_dir}/pasta/scene/baseware/system.lua`
     pub fn source_to_cache_path(&self, source_path: &Path) -> PathBuf {
-        let relative = self.get_relative_path(source_path);
-
-        // Remove dic/ prefix
-        let without_prefix = Self::strip_component_prefix(&relative, &self.dic_prefix);
-
-        // Replace extension and convert hyphens
-        let lua_path = without_prefix.replace('-', "_");
-        let lua_path = Path::new(&lua_path).with_extension("lua");
-
-        self.cache_dir.join("pasta/scene").join(lua_path)
+        let module_name = self.source_to_module_name(source_path);
+        self.cache_dir
+            .join(format!("{}.lua", module_name.replace('.', "/")))
     }
 
     /// Strip `prefix` from a relative path string, only when it ends at a path

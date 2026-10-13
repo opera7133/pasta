@@ -1,15 +1,17 @@
 # Product Steering
 Memories of pasta twine together—now and then a knot, yet always a delight.
 
-> **📖 プロジェクトビジョン・設計原則**: [SOUL.md](../../../SOUL.md) を参照してください。  
+> **📖 プロジェクトビジョン・設計原則**: [SOUL.md](../../SOUL.md) を参照してください。  
 > このドキュメントは開発ロードマップと進捗管理に特化しています。
 
 ## プロジェクト概要
 **pasta**は、「伺か」のようなデスクトップマスコットなどを実現するための対話スクリプトエンジンです。Pasta DSLをLuaにトランスパイルし、「ゴースト」基盤として機能します。
 
-**ビジョン・コアバリュー・設計原則**: [SOUL.md](../../../SOUL.md) 参照
+**ビジョン・コアバリュー・設計原則**: [SOUL.md](../../SOUL.md) 参照
 
 ## 機能の優先順位
+
+> 以下は初期の Phase 0〜4 の区分で、2026-06 までの記録。それ以降の進捗と現在の主題は [roadmap.md](roadmap.md)（Phase 1〜12）が正本。
 
 ### Phase 0: 一次設計の再構築 ✅ 完了
 **最終更新**: 2026-01-30
@@ -19,7 +21,7 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - [x] シーンジャンプテーブル設計の修正 → `scene-search-integration` 完了
 - [x] 宣言的制御フロー（Call/Jump文）の再実装 → `act-impl-call` 完了
 
-**完了仕様**: 127件（`.kiro/specs/completed/` に格納）
+**完了仕様**: 156件（2026-10-10 時点・`.kiro/specs/completed/` に格納）
 
 **主要成果**:
 - ✅ **act-impl-call** - `ACT_IMPL.call` 4段階優先順位検索実装
@@ -41,10 +43,10 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - [x] SHIORI インターフェース（pasta_shiori）- DLL エクスポート
 
 ### Phase 2: コア機能拡張（進行中）🔄
-**最終更新**: 2026-06-19（現行バージョン v0.2.4）
+**最終更新**: 2026-10-10（現行バージョン v0.3.7）
 
 **繰り返し仕様**:
-- 🔁 **release-workflow** - リリース作業手順（`/kiro-spec-impl` 実行のたびにタスクリセット、永続的に未完了）
+- 🔁 **release-workflow** - リリース手順（版の決定 → 版の更新の PR → リリースタグの push → リリース CI の結果の確認。`/kiro-impl` 実行のたびにタスクリセット、永続的に未完了）
 
 **完了仕様**:
 - ✅ **pasta-cue-dsl-extension** - キューコマンド行(`!`)のDSLパース機能追加
@@ -66,6 +68,7 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - ✅ **choice-definition-dsl** - 選択肢定義DSL
 - ✅ **handler-resolution-fallback** - ハンドラ名前解決フォールバック
 - ✅ **ontalk-block-condition** - OnTalkブロック条件
+- ✅ **scene-name-alias** - グローバルシーン名の別名表（pasta.toml `[scene.alias]`、既定 `OnTalk = ["会話"]`。完全一致 1 段で宣言と検索の両側に効く）
 
 **ドキュメント整備**:
 - ✅ **pasta-user-manual** - 利用者（ゴースト作者）向けマニュアル。Pasta DSL 文法・Lua API/コーディング・入門チュートリアルを mdBook 製の静的サイトへ統合し、GitHub Pages で公開（[https://ekicyou.github.io/pasta/](https://ekicyou.github.io/pasta/)）。日本語 bigram 検索を含む。マニュアル（`book/src/`）が利用者向け仕様の唯一の権威で、スキル references はマニュアル章から生成する（`gen-skill-refs.mjs`）
@@ -90,19 +93,17 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - ✅ **Wave 1**: `audit-pasta-core` / `audit-pasta-dsl` / `audit-pasta-lua` / `audit-pasta-shiori` / `audit-pasta-check` / `audit-pasta-lsp` / `audit-pasta-sample-ghost`
 - ✅ **Wave 2**: `audit-dependency-supply-chain`（依存サプライチェーン監査・cargo-deny導入） / `audit-workspace-patterns`（クレート横断パターン統一）
 
-**保留/評価中仕様**:
-- ⏸️ **pasta-conversation-inline-multi-stage-resolution** - 動的単語参照（Phase 3相当、削除検討中）
-- ⏸️ **ukagaka-desktop-mascot** - メタ仕様（Phase 4相当）
+**保留/評価中仕様**: なし（動的単語参照は `dynamic-word-reference` で完了、`ukagaka-desktop-mascot` は `completed/` へ移動済み）
 
 ### Phase 3: 高度機能（計画中）
-- [ ] シーン継続チェーン（`pasta-label-continuation`）
+- [x] シーン継続チェーン（`＞チェイントーク` / `＞yield`）— `.kiro/specs/completed/yield-continuation-token/`
 - [x] 動的単語参照（`＠＄変数名`・`＠＄変数名（…）`） — `.kiro/specs/completed/dynamic-word-reference/`
 - [ ] ランタイム拡充・使い勝手向上
 - [ ] イベントハンドリングの拡充
 
 ### Phase 4: エコシステム統合（将来）
-- [ ] SHIORI.DLLとしてのコンパイル
+- [x] SHIORI.DLLとしてのコンパイル
 - [ ] arekaへの投入（`ukagaka-desktop-mascot`メタ仕様）
 - [ ] MCPまたはLLMとの連携
 
-**現在地**: Phase 2（コア機能拡張）- **基盤確立済み** ✅
+**現在地**: 現行バージョン v0.3.7。現在の主題は [roadmap.md](roadmap.md) の Phase 11 の残り（属性セマンティクスと失敗の出力）・Phase 12（入門ガイド）。リリースの CI 化は完了し、CI での初回リリースが残る

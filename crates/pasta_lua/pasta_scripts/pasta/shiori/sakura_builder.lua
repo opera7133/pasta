@@ -21,6 +21,21 @@ local function escape_choice(s)
     return s
 end
 
+--- choiceトークンを \![*]\q[display,target(,scope)] へ変換する
+--- scope（選択肢を出したグローバルシーン名）は OnChoiceSelectEx の Reference2 として戻る。
+--- On・script: で始まる ID は SSP が第 3 引数以降を別の意味で使うため付けない。
+--- @param inner table choiceトークン
+--- @return string さくらスクリプト
+local function choice_to_script(inner)
+    local target = inner.target
+    local s = "\\![*]\\q[" .. escape_choice(inner.display) .. "," .. escape_choice(target)
+    if type(inner.scope) == "string"
+        and target:sub(1, 2) ~= "On" and target:sub(1, 7) ~= "script:" then
+        s = s .. "," .. escape_choice(inner.scope)
+    end
+    return s .. "]"
+end
+
 --- スポットタグを生成（SSP ukadoc準拠: 常に\p[ID]形式）
 --- @param spot_id number スポットID番号
 --- @return string スポットタグ
@@ -66,6 +81,67 @@ local function emit_actor_switch(buffer, actor_spots, actor, appearance, tokens)
     return spot
 end
 
+--- 文字を表示するタグの名前（1.4）
+local CHAR_TAGS = { _u = true, _m = true, ["&"] = true }
+
+--- 単位が字を表示するか（文字を表示するタグ、または中身のある囲み）
+local function unit_shows_text(name, literal)
+    return CHAR_TAGS[name] or (literal ~= nil and literal ~= "")
+end
+
+--- テキストに字が 1 文字以上あるか（1.1〜1.7, 1.10）。
+--- `\` 以外の文字・エスケープ・単位にならない `\`・字を表示する単位があれば真
+--- @param s string
+--- @return boolean
+local function has_text(s)
+    local pos = 1
+    while pos <= #s do
+        if s:sub(pos, pos) ~= "\\" then
+            return true
+        end
+        local name, _, next_pos, literal = APPEARANCE.tag_at(s, pos)
+        if not name or unit_shows_text(name, literal) then
+            return true
+        end
+        pos = next_pos
+    end
+    return false
+end
+
+--- テキスト中のタグと囲みに字を表示するものがあるか（1.9, 1.10。タグ以外の文字とエスケープは数えない）
+--- @param s string
+--- @return boolean
+local function script_shows_text(s)
+    local pos = 1
+    while true do
+        local i = s:find("\\", pos, true)
+        if not i then
+            return false
+        end
+        local name, _, next_pos, literal = APPEARANCE.tag_at(s, i)
+        if name and unit_shows_text(name, literal) then
+            return true
+        end
+        pos = next_pos
+    end
+end
+
+--- 内側トークンが字を出すか（S3 の条件。判定は talk_to_script の前のテキストに対して行う。1.8）
+--- @param inner table 内側トークン
+--- @return boolean
+local function emits_text(inner)
+    if inner.text == nil then
+        return false
+    end
+    local text = tostring(inner.text) -- 数値などは talk_to_script と同じく文字列として読む
+    if inner.type == "talk" then
+        return has_text(text)
+    elseif inner.type == "sakura_script" then
+        return script_shows_text(text)
+    end
+    return false -- それ以外の型は字を出さない（3.4）
+end
+
 --- actorグループ内の単一トークンをさくらスクリプト文字列へ変換する
 --- @param actor table|nil グループの発言アクター
 --- @param inner table グループ内トークン
@@ -86,7 +162,7 @@ local function inner_token_to_string(actor, inner)
     elseif inner_type == "raw_script" then
         return inner.text
     elseif inner_type == "choice" then
-        return "\\![*]\\q[" .. escape_choice(inner.display) .. "," .. escape_choice(inner.target) .. "]"
+        return choice_to_script(inner)
     elseif inner_type == "choice_timeout" then
         local ms = inner.seconds and math.floor(inner.seconds * 1000) or 0
         return "\\![set,choicetimeout," .. ms .. "]"
@@ -135,7 +211,7 @@ function BUILDER.build(grouped_tokens, config, input_actor_spots, appearance) --
     -- ビルドローカル状態機械（sakura-script-newline / 完全遅延方式）
     local last_actor = nil    -- 最後に発言したActor
     local last_spot = nil     -- 最後のスポットID（＝現在スコープ）
-    -- 解決済みスポットIDごとに、同一ビルド内で一般文字列（非空 talk）を出力済みか。
+    -- 解決済みスポットIDごとに、同一ビルド内で字を出すトークン（emits_text）を出力済みか。
     -- 段落区切り改行の判定材料（「バルーンに既にテキストがあるか」の意味論）。
     local spot_has_text = {}  -- table<integer, boolean>
     -- 現在スコープ（last_spot）に対する段落区切り改行の保留フラグ。
@@ -181,8 +257,9 @@ function BUILDER.build(grouped_tokens, config, input_actor_spots, appearance) --
                     if last_spot ~= nil then
                         spot_has_text[last_spot] = false
                     end
-                elseif inner.type == "talk" and inner.text ~= nil and inner.text ~= "" then
-                    -- S3: 非空 talk（一般文字列）。改行 → has-text 設定 → talk本文 の順を厳守。
+                elseif emits_text(inner) then
+                    -- S3: 字を出すトークン（字のある talk・字を表示する sakura_script）。
+                    -- 改行 → has-text 設定 → 本文 の順を厳守。
                     if pending_break then
                         buffer:put(string.format("\\n[%d]", math.floor(spot_newlines * 100)))
                         pending_break = false
@@ -192,8 +269,8 @@ function BUILDER.build(grouped_tokens, config, input_actor_spots, appearance) --
                     end
                     emit_inner_token(buffer, actor, inner, appearance, last_spot)
                 else
-                    -- S4: 空 talk・surface・wait・sakura_script・newline・choice・
-                    -- choice_timeout・raw_script。変換出力のみ（has-text・pending 不変）。
+                    -- S4: 字の無い talk・字を表示しない sakura_script・surface・wait・newline・
+                    -- choice・choice_timeout・raw_script。変換出力のみ（has-text・pending 不変）。
                     emit_inner_token(buffer, actor, inner, appearance, last_spot)
                 end
             end
