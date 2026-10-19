@@ -236,8 +236,8 @@ return SHIORI.request({{ id = {id}, method = "get", version = 30, charset = "UTF
     }
 }
 
-/// 204 では素通りさせないイベント。9 段目の OnChoiceSelectEx は Reference2 が登録名でない
-/// `OnMouseDoubleClick` で、グローバル前方一致のフォールバックで `＊おやつの話` に届いて
+/// 204 では素通りさせないイベント。9 段目の OnChoiceSelectEx は Reference2（選択肢を出した
+/// シーンの名前）が登録名でなく、グローバル前方一致のフォールバックで `＊おやつの話` に届いて
 /// 200 になる。ジャンプ先が壊れると 204 に落ちて検査を素通りするので、ここだけ 200 と
 /// 空でない Value を必須にする（tasks.md Implementation Notes「3.2 で」）。
 const MUST_SPEAK: &[&str] = &["OnChoiceSelectEx"];
@@ -333,8 +333,42 @@ fn stage_table_matches_dic_files() {
     }
 }
 
+/// 失敗表記の種類の名前（`pasta/failure.lua` の `FAILURE.LABEL` の値）を読み込んだ
+/// ランタイムから引く。表に種類が足されても追随する。
+fn failure_labels(runtime: &PastaLuaRuntime) -> Vec<String> {
+    let script = r#"local t = {}
+for _, v in pairs(require("pasta.failure").LABEL) do t[#t + 1] = v end
+return table.concat(t, "\n")"#;
+    let v = runtime
+        .exec(script)
+        .unwrap_or_else(|e| panic!("FAILURE.LABEL を読めない: {e}"));
+    let labels: Vec<String> = v
+        .as_string()
+        .and_then(|s| s.to_str().ok().map(|s| s.to_string()))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert!(!labels.is_empty(), "FAILURE.LABEL が空");
+    labels
+}
+
+/// 応答に失敗表記の種類の名前が 1 つも含まれないことを確かめる（要件 10.4）
+fn assert_no_failure_notation(stage: u8, file: &str, id: &str, response: &str, labels: &[String]) {
+    let found: Vec<&str> = labels
+        .iter()
+        .map(String::as_str)
+        .filter(|l| response.contains(l))
+        .collect();
+    assert!(
+        found.is_empty(),
+        "stage {stage} ({file}): {id} の応答に失敗表記 {found:?} がある:\n{response}"
+    );
+}
+
 /// N = 1〜12 で段階の辞書を組み立てて実ローダーで読み込み、OnBoot と検証イベント表の
 /// 該当行を送って応答を確かめる（Req 1.6・2.1・2.6・3.9・4.1・4.2・4.2a・4.4・4.5・4.6）。
+/// 応答に失敗表記が無いことも確かめる（failure-output-unification 要件 10.4）。
 /// 仮想イベント（ランダムトーク・時報）は送らない。
 #[test]
 fn every_stage_loads_and_responds() {
@@ -351,18 +385,18 @@ fn every_stage_loads_and_responds() {
         let runtime = PastaLoader::load(ghost.path())
             .unwrap_or_else(|e| panic!("stage {n} ({file}): load failed: {e}"));
 
+        let labels = failure_labels(&runtime);
+
         let response = shiori_request(&runtime, "OnBoot", &[]);
         assert_responds(n, file, "OnBoot", &response);
+        assert_no_failure_notation(n, file, "OnBoot", &response, &labels);
         for e in events.iter().filter(|e| e.stage == n) {
             let response = shiori_request(&runtime, &e.id, &e.references);
             assert_responds(n, file, &e.id, &response);
+            assert_no_failure_notation(n, file, &e.id, &response, &labels);
         }
     }
 }
-
-/// `GLOBAL` のキー。Call は GLOBAL を先に引くので、同じ名前のシーンは呼べない
-/// （`pasta_lua` の `pasta/global.lua`・`pasta/shiori/entry.lua` が定義する）。
-const GLOBAL_KEYS: &[&str] = &["yield", "チェイントーク", "ゴースト終了", "close_ghost"];
 
 /// `pasta_shiori` の e2e が足すシーン（`KickE2EProbe`・`GatePrevScene` など）の接頭辞
 const E2E_PREFIXES: &[&str] = &["Kick", "Gate"];
@@ -403,8 +437,11 @@ fn global_scene_names_skip_lua_and_trailers() {
 }
 
 /// 全 `dic/*.pasta` のグローバルシーン名について、異なる 2 つの名前のどちらも他方で始まらず、
-/// `Kick`・`Gate` で始まらず、`GLOBAL` のキーと同じでないことを確かめる（Req 2.5・5.3）。
+/// `Kick`・`Gate` で始まらないことを確かめる（Req 2.5・5.3）。
 /// `＊会話` は別名で OnTalk になるが、書いた名前 `会話` のまま検査する。
+/// 組み込みの飛び先（`GLOBAL` のキー）と同じ名前のシーンは、ここでは確かめない。
+/// `validate` の `scene-shadowed-by-builtin` が、hello-pasta の注意 0 件のテスト
+/// （`pasta_check` の `validate_cli_test.rs` の `test_validate_hello_pasta_clean`）で確かめる。
 #[test]
 fn scene_names_do_not_prefix_collide() {
     let mut names = BTreeSet::new();
@@ -432,9 +469,6 @@ fn scene_names_do_not_prefix_collide() {
             problems.push(format!(
                 "`＊{a}` が `{p}` で始まる（pasta_shiori の e2e と衝突）"
             ));
-        }
-        if GLOBAL_KEYS.contains(&a.as_str()) {
-            problems.push(format!("`＊{a}` が GLOBAL のキーと同じ"));
         }
     }
     assert!(

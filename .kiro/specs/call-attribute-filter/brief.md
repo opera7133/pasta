@@ -134,3 +134,76 @@ roadmap のバックログにあった「`pasta_core` の `resolve_scene_id` の
   - 3 つの関数は、どれも絞り込みの条件を同じ形（文字列から文字列への表 `filters`）で受け取る。
 - **この spec との関係**: この spec は、ちょうどこの絞り込みの条件（`filters`）の形と比べ方を作り直す。`resolve_scene_id` と `find_scene` を残すなら、使われていない 2 つの関数とそのテストも、新しい形に合わせて直すことになる。
 - **要件で決めること**: `resolve_scene_id`（と `find_scene`）を消すか、残すか。消すと、公開している関数が無くなるので、版の付け方の決まり（semver）では互換性を壊す変更になる。絞り込みの条件の形を変えるなら、本番で使う `resolve_scene_id_unified` の引数も変わるので、どちらにしても互換性を壊す変更になる見込みである。消すなら、README の例を `resolve_scene_id_unified` を使う形に書き直す。
+
+## 申し送り（2026-10-10 の discovery・0.5.0 のノベルゲームより）
+
+0.5.0 の目標（areka でノベルゲームが作れる）の道筋に、この spec が入った。ノベルゲームの分岐は、選択肢と、フラグによる分岐の 2 種類である。pasta は `if` を持たないので、**フラグによる分岐を DSL で書く道は、Call の絞り込みだけである**（開発者の決定）。
+
+```pasta
+＊告白＆好感度：高
+    さくら：……わたしも、好き。
+
+＊告白＆好感度：低
+    さくら：ごめんなさい。
+
+＊放課後
+    さくら：話があるの。
+    ＞告白＆好感度＝＄＊好感度
+```
+
+（絞り込みの書き方は、この spec の要件で決める。上は例である。）
+
+要件で決めることに、次を足す。
+
+- **条件の値に変数を書けること**: フラグは変数に入っている。`＞告白＆好感度＝＄＊好感度` のように、比べる相手を変数で書けないと、分岐に使えない。
+- **「それ以外」の場面**: どの場面も条件に合わないと、物語が止まる。属性を書いていない場面を「それ以外」として選ぶ決まりを作るかを決める。
+- **数のしきい値**: 「好感度が 50 以上」のような分岐の書き方。場面の属性と、呼ぶ側の値の、どちらをどちらと比べるか。
+- **候補が 2 つ以上残るとき**: ノベルでは、条件に合う場面が複数残って、どれかが気まぐれに選ばれると困る。実行時の挙動は今のまま（並べ替えて順に使う）とし、辞書の検査（`pasta-check-dic-validate`）で知らせる案。
+- **演出の属性とぶつからないこと**: 同じ場面に、演出が読む属性（`＆曲：夕焼け`）と、絞り込みが読む属性（`＆好感度：高`）が並ぶ。呼ぶ側が条件に挙げない属性は、選ばれ方に影響しない。この性質を、要件に書いて守る。
+- 参照: `.kiro/specs/cue-command-runtime/brief.md`（2026-10-17 に `scene-stage-attributes` をまとめた）、`.kiro/steering/roadmap.md` の「Phase 13」。
+
+## 申し送り（touch-poke-shortcuts より、2026-10-16）
+- `search_scene` の本体は私的な関数 `search_scene_by(name, global_scene_name, exact)`（`crates/pasta_lua/src/search/context.rs` 115 行付近）に移り、`search_scene`（91 行付近）は `exact=false` で、新しい `search_scene_exact` は `true` で呼ぶ。空の `filters` で検索する点は変わらない。フィルターを通すときは、完全一致の道（`SceneTable::resolve_scene_id_exact`）も同じ `filters` を受け取る形になっている。参照: `.kiro/specs/completed/touch-poke-shortcuts/design.md` の SearchExact。
+
+## 申し送り（pasta-check-dic-validate より）
+
+- 辞書の検査は `pasta_check validate`（と `release` の段 4 の関門、VSCode 拡張のゴースト全体の診断）として入った。核は `crates/pasta_check/src/validate/`（ファイルシステムに触れないライブラリ・WASM でも動く）。
+- 検査を足すときに触る所: 報告の種類 `FindingKind`（`report.rs`。誤り／注意の分類と kebab-case の code・文言の `msg` を 1 か所で持つ）、検査の段（`validate/mod.rs` の `validate_ghost` が段の順に呼ぶ）、マニュアルの章 `book/src/debug/validate.md` の報告の表。
+- 種類の追加・分類・出力の 1 行の形を変えるのは本 spec の design.md の Revalidation Triggers に当たる（CI・作者のスクリプト・マニュアル・`wasmBridge.ts` の形の検査に効く）。実行時と同じことを守る一致テスト `crates/pasta_check/tests/validate_parity_test.rs` も合わせて見直す。
+- どちらの spec が検査を足すか・誤りか注意かは、この spec の要件で決める論点として渡す（本 spec では決めていない）。
+
+## 申し送り（failure-output-unification より、2026-10-17）
+
+- 上の Constraints にある失敗表記 `【Call失敗：「名前」が見つからない】` は無くなった。Call の失敗は `pasta/failure.lua` の `FAILURE.report(act, record)` から出し、シーンが見つからないときは `【シーンが見つからない：＞書いた名前】`、キーが名前にならないときは `【名前にならない値：対象（説明）】` になる（種類の名前は `FAILURE.LABEL`）。
+- 論点「一致する候補が無いとき」は、この出口に載せる前提で決め直す。種類を足すなら `FAILURE.LABEL` に足し、表記の形・エスケープ・`[logging] balloon_warning` の切り替えは出口に任せる。
+- 動的コールで関数の参照が先に報告したときは、`call_key` が重ねて出さない（「報告済み」の印 `take_fn_failed`）。フィルターの評価を入れる位置は、この印の読み取りより後になる。
+- 参照: `.kiro/specs/completed/failure-output-unification/design.md` の「報告箇所」「重ねない規則」、マニュアル `book/src/reference/runtime-failures.md`。
+
+## 申し送り（runtime-error-balloon より、2026-10-17）
+
+- `FAILURE.LABEL` に `SCRIPT_ERROR = "スクリプトのエラー"`・`TIMEOUT = "時間切れ"` が入った（10 種）。種類を足すときは、hello-pasta のテスト（`tutorial_stages_test.rs`）が `LABEL` を全部読んで見張ることを前提にしてよい。
+- `FAILURE.format` は `FAILURE.body`（枠なし・無効化なし）を無効化して【】で囲む形になった（出力は不変）。表記の形を変えるときは `FAILURE.body` も見る。
+- 生成コードのシーン関数の先頭は `act:init_scene(SCENE, "書いたグローバル名", "書いたローカル名"|nil, "<.pasta>|<lua>:<pasta>,...")` になった。act は `scene_name`・`local_scene_name`・`line_map`・`scene_names` を控え、`call_restore` は 4 つを戻し、`restore_scene` はグローバル名だけを戻す。`act.lua`・コード生成・`init_scene` の行の数に触るときは、行の対応（`transpiler.rs` の `fill_line_maps`）と止まるエラーの表記を見直す。
+- 参照: `.kiro/specs/completed/runtime-error-balloon/design.md` の Revalidation Triggers と `research.md` の「実装の記録」、マニュアル `book/src/reference/runtime-failures.md`「止まるエラーの表記」。
+
+## 2026-10-17 棚卸の再測定（main b4164100）
+
+- **前提の変化**: `failure-output-unification` と `runtime-error-balloon` が完了し、未完了の前提は `scene-attribute-store` だけになった。`runtime-error-balloon` は `act.lua` の途中の Call の戻し（`call_restore`）を、書いた名前 2 つと行の対応も戻す形にした（上の申し送り）。`attrs` を第 3 引数で `act:call` へそのまま渡す点は変わらない。Call の Lua を出す `element_gen.rs` は変わっていない。場面の関数の頭の `init_scene` の引数が増えたので、生成した Lua の期待値（スナップショット）は全部変わった。絞り込みを足すと、Call を含む期待値がまた変わる。
+- **行番号の直し**: `act.lua` は 829 行（`find_scene` 680 行、`call` 695 行、その中の `find_handler("scene", key)` 709 行、`search_dictionary` の `SCENE.search(key, scene_name)` 336 行）。`scene.lua` は 240 行（`SCENE.search` 150 行、`search_scene` を呼ぶのは 160 行、`SCENE.co_exec` 208 行）。`search/context.rs` は 788 行（`search_scene` 91 行、`search_scene_exact` 105 行、空の `filters` を作る `search_scene_by` 115〜121 行）。`scene_table.rs` は 483 行（`resolve_scene_id` 179 行、`resolve_scene_id_unified` 226 行、`resolve_scene_id_exact` 251 行、`filter_by_attributes` 287 行、`find_scene` 453 行）。Call の Lua は `element_gen.rs` 205〜236 行。マニュアル `book/src/lua/script-api.md` の「使わない」は 318 行と 331 行。
+- **触るファイル**: 文法 `crates/pasta_dsl/src/parser/grammar.pest`（272。Call の規則 170 行）、`parse_action.rs`（456）、`parser/ast/action.rs`（323）、`partial.rs`（477）、`element_gen.rs`（564）、`act.lua`（829。1,000 行に近づいている）、`scene.lua`（240）、`crates/pasta_lua/src/search/context.rs`（788）・`search/mod.rs`（84）、`pasta_core` の `registry/scene_table.rs`（483）・`scene_types.rs`（36）とその試験（`scene_table_resolve_filter_tests.rs` 387・`scene_table_candidate_tests.rs` 717）、`crates/pasta_core/README.md`、`visit_action.rs`（431）、`pasta.tmLanguage.json`（272）、候補が複数残る場面の検査を足すなら `crates/pasta_check/src/validate/`、マニュアル（`grammar/call-jump.md`・`lua/script-api.md`・`internals/registry-search.md`・`debug/validate.md`）と生成スキル、期待値ファイル。新しいファイルは無い見込み。
+- **規模**: 19〜21 タスク（前回の 17〜20 に、0.5.0 の申し送りの「条件の値に変数」「それ以外の場面」「候補が複数残るときの検査」を足した）。上限を少し超えうるが、一度分けた spec なので、もう分けない。
+- **先に要るもの**: `scene-attribute-store`（属性の保持と値の型）。ファイルの重なり: `scene-attribute-store`（文法・`partial.rs`・`element_gen.rs`・`act.lua`・`scene.lua`・`search/context.rs`・`scene_table.rs`・`scene_types.rs`）、`scene-anchor-link`（文法・`parse_action.rs`・構文木・`partial.rs`・`element_gen.rs`・`act.lua`・VSCode の文法定義・`visit_action.rs`・検査の段）、`cue-command-runtime`（文法・`act.lua`・検査の段）、`novel-talk-flow`（`act.lua`・`scene.lua`・`search/context.rs`・`scene_table.rs`・検査の段）、`novel-checkpoint-rollback`（`act.lua`・`scene_table.rs`）、`shell-element-click`（`act.lua`）、`pasta-check-validate-edges`（検査の段の `validate/mod.rs`）。
+- **種別**: 機能（`＞シーン＆k＝v` は今は構文エラー）。0.5.0 のフラグによる分岐の本命（開発者の決定）。
+- **要件定義のモデル**: Fable のまま。後から戻しにくい決定は、Call の絞り込みの書き方と意味である（新しい文法で、見本のノベルと作者の辞書がそのまま使う）。2026-10-10 の discovery が決めたのは方向（分岐は Call の絞り込みで書く・属性の倉は 1 つ）だけで、推奨の無い論点が 3 つ以上、絡み合って残る。比べる記号の種類と数のしきい値の向き（場面の属性と呼ぶ側の値のどちらを左に置くか）、条件のつなぎ方（かつ・または）、「それ以外」の場面と候補が無いときの動き（候補の控えのキーとも絡む）、条件の値に変数を書く形と連結の `＆` との見分け。値の型の解釈も、まだ `scene-attribute-store` の要件で決まっていない。
+- **分割の案**: 分けない（2026-10-04 に分けた spec）。
+- **見つけた穴・古くなった記述**:
+  - 冒頭の「ステータス」の「Wave 5」と、「Constraints」の「並走条件（Wave 5）: Wave 5 はこの spec だけ」は古い。今は 0.5.0 の道筋の 5 番で、ウェーブは 0.5.0 の棚卸で組む。
+  - 「Constraints」の失敗表記 `【Call失敗：…】` は無くなった（申し送り（failure-output-unification より）のとおり）。
+  - 「候補が 2 つ以上残るとき」の「辞書の検査（`pasta-check-dic-validate`）で知らせる案」は、その spec が完了したので、この spec が `validate` に足す（または `novel-talk-flow` に渡す）と読み替える。足すならタスクに数える。
+  - イベントから場面を起こす `SCENE.co_exec`（`scene.lua` 208 行）も `attrs` を受けて捨てている。
+
+## 申し送り（pasta-check-validate-edges より）
+
+- `pasta_check validate` の飛び先の検査は、辞書の中身が分からないとき（構文エラー・読めない辞書ファイル・pasta.toml の誤り）に丸ごと省く形になった。判定は `crates/pasta_check/src/validate/report.rs` の `skip_reasons`（統計の `skipReasons`）で、すべての段の報告がそろった後に 1 回だけ行う（`validate/mod.rs`）。
+- 見直しが要る論点: この spec が `validate` に辞書のシーンの集まりに頼る検査を足すなら、`skip_reasons` が空のときだけ走らせるか。辞書の中身が分からないことを表す誤りの種類を足すなら、`skip_reasons` の対応に入れるか。
+- 参照: `.kiro/specs/completed/pasta-check-validate-edges/design.md` の「Revalidation Triggers」と「Report（report.rs）」の省く理由の表。

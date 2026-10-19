@@ -173,5 +173,31 @@ Call ターゲットの後ろに `＆key＝value` 形式のフィルターを付
   - テスト用の見本 `crates/pasta_lua/tests/fixtures/sample.pasta` の 14 行に、ファイルの属性 `＆天気：晴れ` がある。属性を Lua に出すと、この見本から作る `sample.generated.lua` と、比べる相手の `sample.expected.lua` が変わる。「属性の無いシーンの出力は変えない」という約束では守られないので、作り直しをタスクに入れる。
   - 宣言行の属性を拾うと、グローバルシーンでは「宣言行」と「次の行からの属性行」の 2 か所に同じ名前を書ける。どちらを優先するかを要件で決める。
   - 別名があると、`＊会話` と `＊OnTalk` の 2 つの宣言が同じ名前のシーンになる。属性は宣言ごと（通し番号ごと）に持つことを、要件に書く。
-  - `pasta_shiori` の結合テストは、古いランタイムの写し（`crates/pasta_shiori/tests/support/scripts/pasta/scene.lua`）を読む。この spec の確認用のテストは `pasta_lua` 側に置く。写しは直さない（`shiori-test-support-runtime` の持ち場）。
+  - `pasta_shiori` の結合テストが読んでいた古いランタイムの写し（`crates/pasta_shiori/tests/support/scripts/pasta/scene.lua`）は、`shiori-test-support-runtime`（2026-10-16 完了）で無くなった。今は結合テストも、`pasta.dll` が `profile/pasta/pasta_scripts/` へ自己展開した本物の `scene.lua` を読む（申し送り: `shiori-test-support-runtime` より）。確認用のテストを `pasta_lua` 側と `pasta_shiori` 側のどちらに置くかは、要件・設計で決める。
   - 前回の節の行番号のうち、登録表を作り直す場所（`finalize.rs` 182 行）と、属性をローカルシーンへ写す処理（`scene_registry.rs` 155〜189 行）は今も合っている。マニュアルの「内部に記録される」は `book/src/grammar/block-structure.md` の 248 行と 280 行に、ファイルの属性の説明は `book/src/internals/transpiler.md` の 158 行と 165 行に動いた。
+
+## 申し送り（2026-10-10 の discovery・0.5.0 のノベルゲームより）
+
+0.5.0 の目標（areka でノベルゲームが作れる）の道筋に、この spec が入った。0.4.0 の後、先頭に置く。
+
+- **読み手が 1 人増える**: 属性の倉は 1 つで、読み手が 2 人になる。Call の絞り込み（`call-attribute-filter`）は場面を選ぶときに読み、演出（`cue-command-runtime` の柱の分。2026-10-17 に `scene-stage-attributes` をまとめた）は場面に入るときに読む。演出は、語彙の表にある名前の属性だけを、台本へ流す。モードの切り替えは作らない（開発者の決定）。
+- **順番を保つ**: 演出は、属性を書いた順に流したい。今は、統合した属性が順番を持たない表（`HashMap`）に入る（`crates/pasta_lua/src/context.rs` 19・106〜114 行）。倉の形を決めるときに、順番を保てる形にする。
+- **ローカルシーンと名前なしの `＊`**: 演出の側は、ファイルの属性と親の属性を、ローカルシーンへも受け継がせたい（旧仕様は「ローカルシーンには影響しない」だった）。名前なしの `＊` は、今は属性を受け継がない（`crates/pasta_dsl/src/parser/parse_scene.rs` 88〜91 行）。受け継ぎの決まりを決めるときに、この使い方を材料にする。受け継ぐかどうかの最終の決定は、この spec の要件で行う。
+- **値は 1 つ**: `＆背景：教室、夕方` は、`教室、夕方` という 1 つの文字列になる（`grammar.pest` 164〜166 行）。値を複数持たせる必要が出たら、演出の側の spec が言い出す。この spec では変えない。
+- 参照: `.kiro/specs/cue-command-runtime/brief.md`（2026-10-17 に `scene-stage-attributes` をまとめた）、`.kiro/steering/roadmap.md` の「Phase 13」。
+
+## 2026-10-17 棚卸の再測定（main b4164100）
+
+- **前提の変化**: 止まるエラーのバルーン表示（`runtime-error-balloon`）が、場面の関数の頭の 1 行を変えた。今は `act:init_scene(SCENE, "書いたグローバル名", "書いたローカル名" または nil, "行の対応")` で、4 つ目の「行の対応」は、整形の後にトランスパイラがその行の最後の `)` の前へ埋める（`crates/pasta_lua/src/transpiler.rs` の `fill_line_maps` 308 行、`crates/pasta_lua/src/code_gen/scope_gen.rs` 286〜298 行）。見本の期待値とすべてのスナップショットが、このとき変わった。
+  - 属性を `init_scene` の引数で渡すなら、「行の対応」が最後の引数であることと、最後の `)` を探して埋めることを崩さない置き方にする。
+  - 属性を場面の関数の外に行として出すと、その後ろの場面の「行の対応」の数がずれる（埋め直しは自動なので害は無いが、属性のあるファイルの期待値は多くの行で変わる）。属性の無いファイルの出力を変えない約束は、そのまま守れる。
+  - act は、場面の表から書いたグローバル名を引く表 `scene_names` を持つようになった（`pasta_scripts/pasta/act.lua` 207〜220 行）。読み出しの口を `scene.lua` に置き、`act.lua` を触らない方針は、そのまま取れる。
+- **触るファイル**: 前回と同じ。今の行数は `parse_scene.rs` 426、`scope_gen.rs` 445、`context.rs` 454、`transpiler.rs` 339、`scene.lua` 240（完全一致の `SCENE.co_exec_exact` が増えた）、`finalize.rs` 358、`scene_registry.rs` 576、`scene_types.rs` 36。見本 `crates/pasta_lua/tests/fixtures/sample.expected.lua`・`sample.generated.lua` と、属性の入ったスナップショット（`kind_scene_attributes`・`scene_with_attributes`）。1,000 行に近いものは無い。
+- **規模**: 15〜18 タスクのまま。行の対応の確かめは、見本の作り直しのタスクに含める。
+- **先に要るもの**: なし。0.5.0 の先頭に置ける。ファイルの重なり: `cue-command-runtime`（`parse_scene.rs`・`scope_gen.rs`・`transpiler.rs`・`context.rs`・スナップショット）、`call-attribute-filter`（`scene.lua`・`scene_types.rs`）。どちらもこの spec の後。宣言行の属性の位置を編集中の解析（`crates/pasta_dsl/src/partial.rs`）や VSCode の文法定義で扱うことになれば、`call-attribute-filter`・`scene-anchor-link` とも重なる。`shell-element-click` が `scene.lua` に範囲つきの完全一致を足す場合は、それとも重なる。`novel-areka-contract`・`pasta-check-validate-edges`・`tutorial-ssp-gaps` とは重ならない。
+- **種別**: 機能（書いた属性が、実行時にはどこにも残らない）。
+- **要件定義のモデル**: Fable。決めるのは「属性の倉の意味」で、後の 2 本（Call の絞り込みと柱の演出）がその上に乗る、取り消しにくい文法の意味と公開の Lua の口である。値の型、ローカルシーンと名前なしの `＊` への受け継ぎ、書いた順と重なったときの優先（ファイル・宣言行・次の行の属性行）の 3 つが互いに絡み、まだ推奨案が無い。
+- **分割の案**: 不要。
+- **見つけた穴・古くなった記述**:
+  - シーン 1 つを処理する `process_global_scene` は `transpiler.rs` の 214 行に動いた（前回は 202 行）。空の絞り込み条件を作るのは `crates/pasta_lua/src/search/context.rs` の 121 行（前回は 96 行）。
+  - マニュアルの「内部に記録される」は `book/src/grammar/block-structure.md` の 271 行と 303 行に動いた。宣言行の属性では今も成り立たない。

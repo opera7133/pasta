@@ -7,11 +7,14 @@
 local ACT = require("pasta.act")
 local BUILDER = require("pasta.shiori.sakura_builder")
 local CALLBACK = require("pasta.shiori.event.callback")
+local CLOCK = require("pasta.shiori.clock")
 local CONFIG = require("pasta.config")
 local STORE = require("pasta.store")
 
 --- @class ShioriAct : Act SHIORI専用アクションオブジェクト
 --- @field _spot_newlines number スポット切り替え時の改行数（デフォルト1.5）
+--- @field _choice_newlines number 字の後の選択肢の前の改行幅（デフォルト1.5）
+--- @field _after_choice_newlines number 選択肢の後の改行幅（デフォルト1.0）
 --- @field req ShioriRequest|nil SHIORIリクエストオブジェクト（読み取り専用として扱うこと）
 local SHIORI_ACT = {}
 
@@ -46,6 +49,10 @@ function SHIORI_ACT.new(actors, req)
     local base = ACT.new(actors)
     -- pasta.tomlの[ghost]セクションからspot_newlinesを読み込み（デフォルト1.5）
     base._spot_newlines = CONFIG.get("ghost", "spot_newlines", 1.5)
+    -- 同じく[ghost]セクションからchoice_newlinesを読み込み（デフォルト1.5）
+    base._choice_newlines = CONFIG.get("ghost", "choice_newlines", 1.5)
+    -- 同じく[ghost]セクションからafter_choice_newlinesを読み込み（デフォルト1.0）
+    base._after_choice_newlines = CONFIG.get("ghost", "after_choice_newlines", 1.0)
     -- SHIORIリクエストオブジェクトを設定（任意）
     base.req = req
     return setmetatable(base, SHIORI_ACT_IMPL)
@@ -67,7 +74,9 @@ function SHIORI_ACT_IMPL.build(self)
     -- STORE.actor_spots・STORE.appearanceを直接BUILDER.build()に渡す（直接変更方式）
     -- STORE.appearanceがnil（旧ストア）ならビルダーがビルドローカル状態を使う
     local script = BUILDER.build(token, {
-        spot_newlines = self._spot_newlines
+        spot_newlines = self._spot_newlines,
+        choice_newlines = self._choice_newlines,
+        after_choice_newlines = self._after_choice_newlines
     }, STORE.actor_spots, STORE.appearance)
 
     return script
@@ -119,7 +128,8 @@ function SHIORI_ACT_IMPL.transfer_date_to_var(self)
         return self
     end
 
-    local date = self.req.date
+    -- 仮想時刻のずれがあれば仮想の日付（ずれ 0 なら req.date そのもの）
+    local date = CLOCK.date(self.req)
 
     -- 英語フィールド（数値型）を転記
     for _, f in ipairs(DATE_NUM_FIELDS) do
@@ -276,9 +286,10 @@ function SHIORI_ACT_IMPL.get_property(self, name_or_names, timeout, timeout_mess
         timeout_message = "callback timeout: get_property"
     end
 
-    -- イベント ID 生成 + ステージング
+    -- イベント ID 生成 + ステージング（締め切りは なめらかな時計。req.date が無ければ OS の時計）
     local event_id = CALLBACK.next_event_id()
-    CALLBACK.stage_pending(event_id, os.time() + timeout, timeout_message)
+    local now = (self.req and CLOCK.steady(self.req)) or os.time()
+    CALLBACK.stage_pending(event_id, now + timeout, timeout_message)
 
     -- トークンバッファ退避
     local saved_tokens = self.token

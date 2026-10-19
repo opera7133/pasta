@@ -71,11 +71,14 @@ local RES = require("pasta.shiori.res")
 local SHIORI_ACT = require("pasta.shiori.act")
 local STORE = require("pasta.store")
 local CALLBACK = require("pasta.shiori.event.callback")
+local STOP = require("pasta.shiori.stop")
+local CLOCK = require("pasta.shiori.clock")
 
 -- 1.5. デフォルトイベントハンドラをロード
 require("pasta.shiori.event.boot")
 require("pasta.shiori.event.choice_select")
 require("pasta.shiori.event.second_change")
+require("pasta.shiori.event.mouse")
 
 -- 2. モジュールテーブル宣言
 --- @class EVENT
@@ -188,6 +191,8 @@ function EVENT.drive(co, act, ...)
     -- nil yieldをスキップ
     local ok, value = resume_until_valid(co, ...)
     if not ok then
+        -- 止まった場所の表記のため、失敗したコルーチンとエラーの値を控える
+        STOP.hold(co, value)
         -- 予約の後、中断の前にエラーで終わったシーンの予約を残さない
         CALLBACK.discard_staged()
         -- dead のコルーチンを渡し継続を空にする
@@ -203,6 +208,7 @@ end
 
 --- イベント振り分け
 --- 待機中のコールバックに一致すれば CALLBACK.try_route の応答を返す。
+--- 次に CLOCK.observe に合図と返事を見せ、返事（OnPastaClock）を受け取った回は 204 を返す。
 --- それ以外はハンドラを実行し、戻り値をモジュール冒頭の規則で応答にする（thread は EVENT.drive で再開）
 --- @param req table リクエストテーブル（req.id にイベント名）
 --- @return string SHIORI レスポンス
@@ -213,12 +219,19 @@ function EVENT.fire(req)
         return cb_response
     end
 
+    -- 合図と返事を時計に見せる。返事（OnPastaClock）を受け取った回は REG へ進まない
+    if CLOCK.observe(req) then
+        return RES.no_content()
+    end
+
     -- act オブジェクトを作成
     local act = create_act(req)
 
     -- ハンドラを呼び出し
     -- エラーは SHIORI.request の xpcall でキャッチされる
     local handler = REG[req.id] or EVENT.no_entry
+    -- ハンドラが止まったときの表記のため、渡す act を控える
+    STOP.hold_handler(act)
     local result = handler(act)
 
     -- 型判定

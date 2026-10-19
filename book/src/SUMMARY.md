@@ -6,7 +6,20 @@
 
 - [入門ガイド](getting-started/index.md)
   - [前提環境と準備](getting-started/prerequisites.md)
-  - [最初のゴーストを作る](getting-started/first-ghost.md)
+  - [ゴーストの最小一式を置く](getting-started/setup.md)
+  - [1 段目：しゃべらせたい](getting-started/01-boot.md)
+  - [2 段目：二人で掛け合いさせたい](getting-started/02-talk.md)
+  - [3 段目：表情を変えたい](getting-started/03-face.md)
+  - [4 段目：毎回ちがうことを言わせたい](getting-started/04-variety.md)
+  - [5 段目：単語でちょこっと変えたい](getting-started/05-words.md)
+  - [6 段目：時刻を知らせたい](getting-started/06-hour.md)
+  - [7 段目：挨拶したい](getting-started/07-greeting.md)
+  - [8 段目：触ったら反応してほしい](getting-started/08-touch.md)
+  - [9 段目：選ばせたい](getting-started/09-choice.md)
+  - [10 段目：覚えていてほしい](getting-started/10-save.md)
+  - [11 段目：話を続けたい・分岐させたい](getting-started/11-jump.md)
+  - [12 段目：もっと凝ったことをしたい](getting-started/12-lua.md)
+  - [13 段目：配布したい](getting-started/13-nar.md)
 
 # Pasta DSL 文法
 
@@ -46,12 +59,15 @@
   - [開発支援アクション（シーン再生・SHIORIリロード）](debug/dev-actions.md)
   - [構造的制約と緩和策](debug/constraints.md)
   - [接続できないとき（トラブルシューティング）](debug/troubleshooting.md)
+  - [辞書を検査する（pasta_check validate）](debug/validate.md)
 
 # リファレンス
 
 - [起動シーケンスとモジュール解決](reference/startup.md)
 - [pasta.toml リファレンス](reference/pasta-toml.md)
+- [実行時の失敗の出力](reference/runtime-failures.md)
 - [外部リンク集](reference/external-links.md)
+- [シェルを自分の絵にする](reference/shell.md)
 
 # 内部設計（コントリビュータ向け）
 

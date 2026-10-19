@@ -58,6 +58,7 @@ local specs = {
     "virtual_dispatcher_kick_force_test", -- KickForceGate dispatch 入口割り込み許可ゲートテスト (pasta-scene-kick 4.3)
     "virtual_dispatcher_kick_hook_test", -- KickDispatchHook dispatch 前段キック起動＋preempt 結合テスト (pasta-scene-kick 4.4)
     "kick_position_path_inheritance_test", -- 位置パスの dispatch 越し kick 継承テスト (pasta-scene-kick-from-cursor 6.2)
+    "mouse_test",                         -- event.mouse 候補の名前・アクター名テスト (touch-poke-shortcuts 3.1)
     "store_appearance_test",              -- STORE.appearance 外見状態のセッション常駐テスト (actor-surface-restore 1.3)
     "appearance_test",                    -- pasta.shiori.appearance タグ走査・サーフェス観測テスト (actor-surface-restore 2.1)
     "act_dynamic_ref_test",               -- 動的参照のキー解決・警告テスト (dynamic-word-reference 2.1)
@@ -65,6 +66,12 @@ local specs = {
     "actor_proxy_act_delegation_test",    -- プロキシが呼ぶ関数の第 1 引数（置き場所で決まる）と戻り値の正規化テスト (actor-proxy-act-delegation 1.2)
     "act_concat_test",                    -- PASTA.str 連結の被演算子の文字列化・警告テスト (expr-nil-coercion 1.2)
     "act_call_restore_test",              -- 途中の Call の文脈復元・失敗表記テスト (call-execution-correctness 2.1)
+    "failure_sites_test",                 -- 実行時の失敗 14 か所の現行の挙動の特性化テスト (failure-output-unification 1.1)
+    "failure_test",                       -- pasta.failure 失敗の報告の唯一の出口の単体テスト (failure-output-unification 1.2)
+    "stop_test",                          -- pasta.shiori.stop 止まるエラーの場所の見分け・エラー文の整えテスト (runtime-error-balloon 3.2)
+    "virtual_clock_test",                 -- pasta.shiori.clock 仮想時刻のずれ・合図・読み取り・時刻と日付の表テスト (tutorial-ssp-gaps 2.1)
+    "event_clock_hook_test",              -- EVENT.fire 入口の時計のフック（合図と返事を見せる）テスト (tutorial-ssp-gaps 3.1)
+    "actor_style_test",                   -- pasta.shiori.actor_style 装いの出し入れ・出し直し・素通しテスト (actor-display-style 2.3)
     -- 将来のテストスイートをここに追加
     -- "code_generator_test",
     -- "context_test",

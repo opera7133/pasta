@@ -32,7 +32,7 @@ function SCENE.挨拶(act)
 end
 ```
 
-各メソッドの引数・戻り値は [スクリプト用ランタイム API](script-api.md#act) を参照する。シーン関数が終わると、積んだトークンは自動で組み立てられて出力される。そのため、シーン関数の最後に `act:yield()` は書かない（最後に置くと、シーンが中断したまま残り、次の OnTalk の機会に何も出力せずに終わる。[yield](script-api.md#yield)）。
+各メソッドの引数・戻り値は [スクリプト用ランタイム API](script-api.md#act) を参照する。シーン関数が終わると、積んだトークンは自動で組み立てられて出力される。そのため、シーン関数の最後に `act:yield()` は書かない（最後に置くと、シーンが中断したまま残り、次の自然なおしゃべりの機会に何も出力せずに終わる。[yield](script-api.md#yield)）。
 
 `save` は `@pasta_persistence` 管理の永続変数で、セッションをまたいで保持される。`var` は ACT ごとの一時変数で、Call で呼んだ先のシーンやチェイントークの続きとも共有される（[ACT のフィールド](script-api.md#act-のフィールド)）。
 
@@ -99,6 +99,8 @@ REG.OnMouseDoubleClick = function(act)
     return SCENE.co_exec(act, "なでられ")
 end
 ```
+
+`REG.OnMouseDoubleClick` を登録すると、つつきのショートカットのシーン（`＊つっつき反応…`）は呼ばれなくなる（[自前のハンドラの優先](shiori-events.md#自前のハンドラの優先)）。
 
 ハンドラの戻り値は、エンジンが SHIORI の応答にする。
 
@@ -185,7 +187,7 @@ end
 -- DSL から呼び出し: ＠＊時報()  （グローバル関数は ＊ 付きで呼ぶ）
 ```
 
-DSL の `＠関数名（）` は、名前を 5 段（実行中のシーンのシーンテーブル → ローカルシーン → act のメソッド → `GLOBAL` → グローバルシーン）で探して呼ぶ。`GLOBAL` は 4 段目のため、同じ名前のローカルシーンや act のメソッド（`talk`・`actor_proxy`・`global_fn` など）があるとそちらが呼ばれる。`＠＊関数名（）` は検索せずに `GLOBAL` の関数だけを呼ぶ（生成コードは `act:global_fn("関数名")`。関数が無ければ警告ログを出して値なしになる）。グローバル関数を確実に呼ぶには `＊` を付ける（[検索と呼び出し](script-api.md#検索と呼び出し)・[GLOBAL](script-api.md#global)）。
+DSL の `＠関数名（）` は、名前を 5 段（実行中のシーンのシーンテーブル → ローカルシーン → act のメソッド → `GLOBAL` → グローバルシーン）で探して呼ぶ。`GLOBAL` は 4 段目のため、同じ名前のローカルシーンや act のメソッド（`talk`・`actor_proxy`・`global_fn` など）があるとそちらが呼ばれる。`＠＊関数名（）` は検索せずに `GLOBAL` の関数だけを呼ぶ（生成コードは `act:global_fn("関数名")`。関数が無ければ失敗を報告して値なしになる。[実行時の失敗の出力](../reference/runtime-failures.md)）。グローバル関数を確実に呼ぶには `＊` を付ける（[検索と呼び出し](script-api.md#検索と呼び出し)・[GLOBAL](script-api.md#global)）。
 
 ---
 

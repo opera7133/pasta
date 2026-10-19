@@ -314,7 +314,7 @@ fn assert_choice_jumps(event: &str, response: &str, choices: &[(&str, &str, &str
 fn test_choice_after_mid_call_routes_to_emitter() {
     assert_choice_jumps(
         "OnCsAfterMid",
-        r"\p[0]Ｂ通過選んで\![*]\q[後,後選先,OnCsAfterMid_1]\![*]\q[外,後選外,OnCsAfterMid_1]\e",
+        r"\p[0]Ｂ通過選んで\n[150]\![*]\q[後,後選先,OnCsAfterMid_1]\n\![*]\q[外,後選外,OnCsAfterMid_1]\e",
         &[
             ("後", "後選先", "OnCsAfterMid_1", r"\p[0]Ａの後選先\e"),
             (
@@ -332,7 +332,7 @@ fn test_choice_after_mid_call_routes_to_emitter() {
 fn test_choice_before_mid_call_routes_to_emitter() {
     assert_choice_jumps(
         "OnCsBeforeMid",
-        r"\p[0]選んで\![*]\q[前,前選先,OnCsBeforeMid_1]Ｂ通過Ａ再開\e",
+        r"\p[0]選んで\n[150]\![*]\q[前,前選先,OnCsBeforeMid_1]\nＢ通過Ａ再開\e",
         &[("前", "前選先", "OnCsBeforeMid_1", r"\p[0]Ａの前選先\e")],
     );
 }
@@ -343,7 +343,7 @@ fn test_choice_before_mid_call_routes_to_emitter() {
 fn test_choice_from_callee_routes_to_callee() {
     assert_choice_jumps(
         "OnCsFromCallee",
-        r"\p[0]選んで\![*]\q[出,出選先,出選Ｂ_1]\![*]\q[外,出選外,出選Ｂ_1]Ａ通過\e",
+        r"\p[0]選んで\n[150]\![*]\q[出,出選先,出選Ｂ_1]\n\![*]\q[外,出選外,出選Ｂ_1]\nＡ通過\e",
         &[
             ("出", "出選先", "出選Ｂ_1", r"\p[0]Ｂの出選先\e"),
             ("外", "出選外", "出選Ｂ_1", r"\p[0]グローバルの出選外\e"),
@@ -357,7 +357,7 @@ fn test_choice_from_callee_routes_to_callee() {
 fn test_choices_from_both_scenes_in_one_response() {
     assert_choice_jumps(
         "OnCsBoth",
-        r"\p[0]Ａから\![*]\q[Ａの,両選先,OnCsBoth_1]Ｂから\![*]\q[Ｂの,両選先,両選Ｂ_1]Ａ再開\e",
+        r"\p[0]Ａから\n[150]\![*]\q[Ａの,両選先,OnCsBoth_1]\nＢから\n[150]\![*]\q[Ｂの,両選先,両選Ｂ_1]\nＡ再開\e",
         &[
             ("Ａの", "両選先", "OnCsBoth_1", r"\p[0]Ａの両選先\e"),
             ("Ｂの", "両選先", "両選Ｂ_1", r"\p[0]Ｂの両選先\e"),
@@ -370,7 +370,7 @@ fn test_choices_from_both_scenes_in_one_response() {
 fn test_choice_after_tail_call_routes_to_callee() {
     assert_choice_jumps(
         "OnCsTail",
-        r"\p[0]Ａ通過選んで\![*]\q[末,末選先,末選Ｂ_1]\e",
+        r"\p[0]Ａ通過選んで\n[150]\![*]\q[末,末選先,末選Ｂ_1]\e",
         &[("末", "末選先", "末選Ｂ_1", r"\p[0]Ｂの末選先\e")],
     );
 }
@@ -381,7 +381,7 @@ fn test_choice_after_tail_call_routes_to_callee() {
 fn test_choice_without_mid_call_carries_scope() {
     assert_choice_jumps(
         "OnChoiceMenu",
-        r"\p[0]どれ？\_w[450]\![*]\q[甲,選択肢甲,OnChoiceMenu_1]\![*]\q[乙,選択肢乙,OnChoiceMenu_1]\e",
+        r"\p[0]どれ？\_w[450]\n[150]\![*]\q[甲,選択肢甲,OnChoiceMenu_1]\n\![*]\q[乙,選択肢乙,OnChoiceMenu_1]\e",
         &[
             ("甲", "選択肢甲", "OnChoiceMenu_1", r"\p[0]メニューの甲\e"),
             ("乙", "選択肢乙", "OnChoiceMenu_1", r"\p[0]グローバルの乙\e"),
@@ -394,7 +394,7 @@ fn test_choice_without_mid_call_carries_scope() {
 fn test_choice_during_chain_talk_suspension_routes_to_callee() {
     assert_choice_jumps(
         "OnCsSuspend",
-        r"\p[0]選んで\![*]\q[止,止選先,止選Ｂ_1]\e",
+        r"\p[0]選んで\n[150]\![*]\q[止,止選先,止選Ｂ_1]\e",
         &[("止", "止選先", "止選Ｂ_1", r"\p[0]Ｂの止選先\e")],
     );
 }
@@ -405,7 +405,7 @@ fn test_choice_during_chain_talk_suspension_routes_to_callee() {
 fn test_choices_after_expr_fn_global_scene_route_to_emitters() {
     assert_choice_jumps(
         "OnCsExpr",
-        r"\p[0]Ｂから\![*]\q[Ｂの,式選先,式選Ｂ_1]Ａから\![*]\q[Ａの,式選先,OnCsExpr_1]\e",
+        r"\p[0]Ｂから\n[150]\![*]\q[Ｂの,式選先,式選Ｂ_1]\nＡから\n[150]\![*]\q[Ａの,式選先,OnCsExpr_1]\e",
         &[
             ("Ｂの", "式選先", "式選Ｂ_1", r"\p[0]Ｂの式選先\e"),
             ("Ａの", "式選先", "OnCsExpr_1", r"\p[0]Ａの式選先\e"),
@@ -479,7 +479,7 @@ fn assert_failed_call(event_id: &str, expected: &str, warnings: &[&str]) {
 fn test_failed_call_undefined_variable() {
     assert_failed_call(
         "OnFcVarMid",
-        r"\p[0]前【Call失敗：var.未代入 が nil】後元\e",
+        r"\p[0]前【名前にならない値：＄未代入（値なし）】後元\e",
         &["act:call - undefined variable: 'var.未代入'"],
     );
 }
@@ -489,7 +489,7 @@ fn test_failed_call_undefined_variable() {
 fn test_failed_call_function_returning_nothing() {
     assert_failed_call(
         "OnFcFnMid",
-        r"\p[0]前【Call失敗：@値なし() が nil】後元\e",
+        r"\p[0]前【名前にならない値：＠値なし（）（値なし）】後元\e",
         &["act:call - key is not a string or number: operand='@値なし()', value=nil"],
     );
 }
@@ -500,7 +500,7 @@ fn test_failed_call_function_returning_nothing() {
 fn test_failed_call_concat_with_nil_operand() {
     assert_failed_call(
         "OnFcConcatMid",
-        r"\p[0]前【Call失敗：「x」が見つからない】後元\e",
+        r"\p[0]前【シーンが見つからない：＞x】後元\e",
         &["act:call - handler not found: key='x', mode='scene', via=act"],
     );
 }
@@ -516,7 +516,7 @@ fn test_call_string_nil_is_searched() {
 fn test_failed_call_empty_string() {
     assert_failed_call(
         "OnFcEmptyMid",
-        r"\p[0]前【Call失敗：var.空 が空文字列】【Call失敗：値が空文字列】後元\e",
+        r"\p[0]前【名前にならない値：＄空（空文字列）】【名前にならない値：空文字列】後元\e",
         &[
             "act:call - empty variable: 'var.空'",
             "act:call - key is not a string or number: value='' (string)",
@@ -529,7 +529,7 @@ fn test_failed_call_empty_string() {
 fn test_failed_call_boolean() {
     assert_failed_call(
         "OnFcBoolMid",
-        r"\p[0]前【Call失敗：var.真 が boolean】【Call失敗：@真を返す() が boolean】後元\e",
+        r"\p[0]前【名前にならない値：＄真（真偽値）】【名前にならない値：＠真を返す（）（真偽値）】後元\e",
         &[
             "act:call - unsupported value type: 'var.真' (boolean)",
             "act:call - key is not a string or number: operand='@真を返す()', value=true (boolean)",
@@ -543,7 +543,7 @@ fn test_failed_call_boolean() {
 fn test_failed_call_with_argument_list() {
     assert_failed_call(
         "OnFcArgsMid",
-        r"\p[0]前【Call失敗：var.未代入 が nil】甲乙後\e",
+        r"\p[0]前【名前にならない値：＄未代入（値なし）】甲乙後\e",
         &["act:call - undefined variable: 'var.未代入'"],
     );
 }
@@ -554,7 +554,7 @@ fn test_failed_call_with_argument_list() {
 fn test_failed_tail_call() {
     assert_failed_call(
         "OnFcTailEnd",
-        r"\p[0]前中【Call失敗：var.未代入甲 が nil】後【Call失敗：var.未代入乙 が nil】\e",
+        r"\p[0]前中【名前にならない値：＄未代入甲（値なし）】後【名前にならない値：＄未代入乙（値なし）】\e",
         &[
             "act:call - undefined variable: 'var.未代入甲'",
             "act:call - undefined variable: 'var.未代入乙'",
@@ -568,11 +568,29 @@ fn test_failed_tail_call() {
 fn test_failed_call_scene_not_found() {
     assert_failed_call(
         "OnFcNotFound",
-        r"\p[0]前【Call失敗：「どこにも無いシーン」が見つからない】【Call失敗：「どこにも無い動的先」が見つからない】後元\e",
+        r"\p[0]前【シーンが見つからない：＞どこにも無いシーン】【シーンが見つからない：＞どこにも無い動的先】後元\e",
         &[
             "act:call - handler not found: key='どこにも無いシーン', mode='scene', via=act",
             "act:call - handler not found: key='どこにも無い動的先', mode='scene', via=act",
         ],
+    );
+}
+
+/// failure-output-unification 4.5: 出力が失敗表記だけのシーンも、空の出力（204）にせず 200 で返す
+#[test]
+fn test_failure_notation_only_scene_responds() {
+    let (values, log) = run_with_extra_dic(
+        Some("＊OnFcNotationOnly\n　＞どこにも無いシーン\n"),
+        &["ID: OnFcNotationOnly"],
+    );
+    assert_eq!(
+        values[0],
+        r"【シーンが見つからない：＞どこにも無いシーン】\e"
+    );
+    assert_eq!(
+        lua_warning_messages(&log),
+        ["act:call - handler not found: key='どこにも無いシーン', mode='scene', via=act"],
+        "{log}"
     );
 }
 
@@ -643,7 +661,7 @@ fn test_call_concat_target_with_nil_operand_searches_result() {
 fn test_call_concat_target_empty_result_fails_as_empty_string() {
     assert_failed_call(
         "OnEnConcatEmpty",
-        r"\p[0]前【Call失敗：値が空文字列】後\e",
+        r"\p[0]前【名前にならない値：空文字列】後\e",
         &["act:call - key is not a string or number: value='' (string)"],
     );
 }
@@ -653,7 +671,7 @@ fn test_call_concat_target_empty_result_fails_as_empty_string() {
 fn test_call_lone_variable_target_nil_unchanged() {
     assert_failed_call(
         "OnEnVarTarget",
-        r"\p[0]前【Call失敗：var.未代入 が nil】後\e",
+        r"\p[0]前【名前にならない値：＄未代入（値なし）】後\e",
         &["act:call - undefined variable: 'var.未代入'"],
     );
 }
@@ -663,7 +681,7 @@ fn test_call_lone_variable_target_nil_unchanged() {
 fn test_call_lone_function_target_nil_unchanged() {
     assert_failed_call(
         "OnEnFnTarget",
-        r"\p[0]前【Call失敗：@何も返さない() が nil】後\e",
+        r"\p[0]前【名前にならない値：＠何も返さない（）（値なし）】後\e",
         &["act:call - key is not a string or number: operand='@何も返さない()', value=nil"],
     );
 }

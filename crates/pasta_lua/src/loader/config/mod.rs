@@ -82,7 +82,10 @@ impl PastaConfig {
         let (scene_aliases, scene_alias_source) = Self::parse_scene_aliases(content)?;
 
         // Everything else becomes custom_fields
-        let custom_fields = table;
+        let mut custom_fields = table;
+
+        // `[actor."name"].font` → checked tag string (written order from spans).
+        actor_font::apply(content, &mut custom_fields)?;
 
         tracing::debug!("Parsed configuration");
         let mut config = Self {
@@ -161,7 +164,7 @@ impl PastaConfig {
     /// filling **only the missing keys** from [`GhostConfig::default()`] (the
     /// SSOT) without ever overwriting values the author wrote explicitly
     /// (requirements 3.1/3.2/3.4). If the `[ghost]` table is absent it is
-    /// created and all four keys are filled (so `@pasta_config.ghost.*` always
+    /// created and all five keys are filled (so `@pasta_config.ghost.*` always
     /// exists — requirement 3.3).
     ///
     /// The operation is **idempotent**: applying it twice yields the same
@@ -196,6 +199,12 @@ impl PastaConfig {
             ghost
                 .entry("spot_newlines")
                 .or_insert_with(|| toml::Value::Float(defaults.spot_newlines));
+            ghost
+                .entry("choice_newlines")
+                .or_insert_with(|| toml::Value::Float(defaults.choice_newlines));
+            ghost
+                .entry("after_choice_newlines")
+                .or_insert_with(|| toml::Value::Float(defaults.after_choice_newlines));
         }
 
         // `[actor]` is the single SHIORI-required section (requirement 2.1). Its
@@ -320,6 +329,9 @@ fn default_debug_mode() -> bool {
 /// public surface (and `loader::mod` re-exports) stays unchanged.
 mod sections;
 pub use sections::*;
+
+/// `[actor."name"].font` loading (checked display-style tags).
+mod actor_font;
 
 #[cfg(test)]
 #[path = "../config_tests.rs"]

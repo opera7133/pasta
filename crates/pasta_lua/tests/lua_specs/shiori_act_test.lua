@@ -706,6 +706,78 @@ describe("SHIORI_ACT - transfer_date_to_var()", function()
 end)
 
 -- ============================================================================
+-- tutorial-ssp-gaps: transfer_date_to_var() は仮想の日時を移す
+-- Requirements: 2.2
+-- ============================================================================
+
+describe("SHIORI_ACT - transfer_date_to_var() 仮想の日時", function()
+    --- 実際の日時（2026-02-01 14:37:45・日曜）の req.date
+    local function real_req()
+        local unix = os.time({ year = 2026, month = 2, day = 1, hour = 14, min = 37, sec = 45 })
+        return {
+            id = "OnSecondChange",
+            date = {
+                unix = unix, year = 2026, month = 2, day = 1,
+                hour = 14, min = 37, sec = 45, wday = 0, ns = 0,
+            },
+        }
+    end
+
+    --- 仮想の日時を 2026-02-02 09:00:00（月曜）に合わせる
+    local function set_virtual(CLOCK)
+        CLOCK.observe({
+            id = "OnPastaClock",
+            date = real_req().date,
+            reference = { [0] = "2026", "2", "2", "9", "0", "0" },
+        })
+    end
+
+    test("ずれありで 時・時１２・曜日 が仮想の値になる", function()
+        local CLOCK = require("pasta.shiori.clock")
+        CLOCK._reset()
+        set_virtual(CLOCK)
+
+        local req = real_req()
+        local act = new_act(req)
+        act:transfer_date_to_var()
+        CLOCK._reset()
+
+        expect(act.var["時"]):toBe("9時")
+        expect(act.var["時１２"]):toBe("午前9時")
+        expect(act.var["曜日"]):toBe("月曜日")
+        expect(act.var.week):toBe("Monday")
+        expect(act.var["日"]):toBe("2日")
+        -- req.date は書き換えない
+        expect(req.date.hour):toBe(14)
+    end)
+
+    test("ずれ 0 では今と同じ値になる", function()
+        local CLOCK = require("pasta.shiori.clock")
+        CLOCK._reset()
+
+        local act = new_act(real_req())
+        act:transfer_date_to_var()
+
+        expect(act.var["時"]):toBe("14時")
+        expect(act.var["時１２"]):toBe("午後2時")
+        expect(act.var["曜日"]):toBe("日曜日")
+    end)
+
+    test("ずれありでも req.date が無ければ何もしない", function()
+        local CLOCK = require("pasta.shiori.clock")
+        CLOCK._reset()
+        set_virtual(CLOCK)
+
+        local act = new_act({ id = "OnSecondChange" })
+        local result = act:transfer_date_to_var()
+        CLOCK._reset()
+
+        expect(result):toBe(act)
+        expect(act.var["時"]):toBe(nil)
+    end)
+end)
+
+-- ============================================================================
 -- act-token-grouping-fix: さくらスクリプトのバイト比較
 -- 先頭（と clear_spot の後、発言より前）の表示制御はアクター未指定として積んだ位置に出る。
 -- clear_spot は現在のグループを閉じる。set_spot（spot）はグループを閉じない。
@@ -748,7 +820,7 @@ describe("SHIORI_ACT - 先頭の表示制御のバイト比較 (act-token-groupi
         act:choice("t", "d")
         act:choice_timeout(30)
         act:talk(sakura, "A")
-        expect(act:build()):toBe("\\s[5]\\_w[500]\\n\\c\\![*]\\q[d,t]\\![set,choicetimeout,30000]\\p[0]A\\e")
+        expect(act:build()):toBe("\\s[5]\\_w[500]\\n\\c\\![*]\\q[d,t]\\![set,choicetimeout,30000]\\p[0]\\nA\\e")
         STORE.reset()
     end)
 
@@ -867,6 +939,40 @@ describe("SHIORI_ACT - clear_spot を挟む出力のバイト比較 (act-token-g
         act:set_spot("さくら", 1)
         act:talk(sakura, "B")
         expect(act:build()):toBe("\\p[0]AB\\e")
+        STORE.reset()
+    end)
+end)
+
+-- ============================================================================
+-- choice-line-layout: act:choice の行の配置（Task 2.2）
+-- act:choice で積んだ選択肢にも、選択肢行と同じ配置が当たる（2.6）。
+-- 期待値は sakura_builder_test.lua の「字 → 選択肢 → 選択肢」と同じ並びである。
+-- ============================================================================
+
+describe("SHIORI_ACT - choice-line-layout: act:choice の行の配置", function()
+    test("2.6: 台詞 → act:choice → act:choice で \\n[150] と \\n が選択肢の直前に 1 つずつ出る", function()
+        local act, sakura, _, STORE = new_bytes_act()
+        act:talk(sakura, "どれ")
+        act:choice("甲先", "甲")
+        act:choice("乙先", "乙")
+        expect(act:build()):toBe("\\p[0]どれ\\n[150]\\![*]\\q[甲,甲先]\\n\\![*]\\q[乙,乙先]\\e")
+        STORE.reset()
+    end)
+
+    -- Task 2.3: act:sakura_script(話し手, "\\c") は、DSL の台詞の行に書いた \c が生成する呼び出し
+    test("7.1/7.2: 台詞に書いた \\c の後は、act:choice の前にも、話し手が戻った後の talk の前にも区切りが出ない", function()
+        local act, sakura, kero, STORE = new_bytes_act()
+        act:talk(sakura, "まえおき")
+        act:sakura_script(sakura, "\\c")
+        act:choice("甲先", "甲")
+        act:choice("乙先", "乙")
+        expect(act:build()):toBe("\\p[0]まえおき\\c\\![*]\\q[甲,甲先]\\n\\![*]\\q[乙,乙先]\\e")
+
+        act:talk(sakura, "やあ")
+        act:talk(kero, "はい")
+        act:sakura_script(sakura, "\\c")
+        act:talk(sakura, "つぎ")
+        expect(act:build()):toBe("\\p[0]やあ\\p[1]はい\\p[0]\\cつぎ\\e")
         STORE.reset()
     end)
 end)

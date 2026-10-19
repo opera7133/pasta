@@ -15,12 +15,12 @@
 | 5 | 単語でちょこっと変えたい | 単語のランダム選択 | [グローバル単語](../../book/src/grammar/words.md#グローバル単語定義) `＠単語：a、b、c`、台詞の中の `＠単語` | — | `05-words.pasta` |
 | 6 | 時刻を知らせたい | 正時に時報 | `＊時報12`・`＊時報その他`（[OnHour](../../book/src/lua/shiori-events.md#onhour) の 4 段の候補）、[日時変数](../../book/src/grammar/variables.md#日時変数) `＄時１２` | — | `06-hour.pasta` |
 | 7 | 挨拶したい | ベースウェアのイベントに応える・付加情報を読む・ベースウェアに聞く | シーン名＝イベント名（[シーン関数フォールバック](../../book/src/lua/shiori-events.md#シーン関数フォールバック)）、[`＞transfer_req_to_var`](../../book/src/grammar/variables.md#リクエスト変数reference)、`＄ｒ０`、[プロパティ変数](../../book/src/grammar/variables.md#プロパティ変数) `＄％baseware.name`、OnGhostChanged・OnGhostChanging に応答すると OnBoot・OnClose は来ない、マニュアルの一覧に無いイベントも同名シーンで応答できる（[UKADOC の OnGhostChanging](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanging)） | `OnGhostChanged`・`OnGhostChanging`・`OnFirstBoot`・`OnClose` | `07-greeting.pasta` |
-| 8 | 触ったら反応してほしい | 触られた部位で台詞を変える | `＊OnMouseDoubleClick`、[`＞transfer_req_to_var`](../../book/src/grammar/variables.md#リクエスト変数reference)、`＄ｒ４` | `OnMouseDoubleClick` | `08-touch.pasta` |
+| 8 | 触ったら反応してほしい | 触られた部位とキャラで台詞を変える | [ショートカットのシーン](../../book/src/lua/shiori-events.md#つつき撫でのショートカット)の名前 `＊つっつき反応`（つつく）・`＊さわり反応`（撫でる）＋アクター名＋部位の名前（`＊つっつき反応女の子Head`・`＊つっつき反応男の子その他`・`＊つっつき反応Face`・`＊つっつき反応その他`）、同じ名前のシーンからの抽選 | `OnMouseDoubleClick`・`OnMouseMove` | `08-touch.pasta` |
 | 9 | 選ばせたい | 選択肢を出して選ばれた先へ進む | [選択肢行](../../book/src/grammar/block-structure.md#選択肢行) `＠？ジャンプ先「表示」`、[キューコマンド](../../book/src/grammar/block-structure.md#キューコマンド行) `!select(秒)`、選ばれた ID のシーンへの[自動ルーティング](../../book/src/lua/shiori-events.md#onchoiceselectex) | `OnChoiceSelectEx` | `09-choice.pasta` |
 | 10 | 覚えていてほしい | 終了しても残る値 | [グローバル変数](../../book/src/grammar/variables.md#グローバル変数) `＄＊回数`、算術の代入 `＄＊回数＝＄＊回数＋１`（未代入の変数は算術で 0 とみなされる。[値が無いときの扱い](../../book/src/grammar/variables.md#値が無いときの扱い)） | — | `10-save.pasta` |
 | 11 | 話を続けたい・分岐させたい | 話の続き・ランダムジャンプ | `＞シーン名`（[Call](../../book/src/grammar/call-jump.md)）、同名・[前方一致](../../book/src/grammar/call-jump.md#前方一致によるターゲット解決)の候補からのランダム選択、[ローカルシーン](../../book/src/grammar/block-structure.md#ローカルシーン) `・`、[`＞チェイントーク`](../../book/src/grammar/call-jump.md#チェイントーク)、ローカル優先の[スコープ解決](../../book/src/grammar/call-jump.md#スコープ解決アルゴリズム) | — | `11-jump.pasta` |
 | 12 | もっと凝ったことをしたい | Lua の関数を呼ぶ | シーン内の ```` ```lua ```` ブロック（[Lua ブロックの配置](../../book/src/grammar/block-structure.md#lua-ブロックの配置)）、`function SCENE.名前(act)`、`＞＠名前（）`（[条件分岐の実現](../../book/src/grammar/call-jump.md#条件分岐の実現)の書き方） | — | `12-lua.pasta` |
-| 13 | 配布したい | `.nar` にする | SSP の NAR 作成機能（6 段目で有効にした開発者用機能の「ディレクトリをドロップした際に更新ファイルや NAR を作成」を ON にしてフォルダをドロップ） | — | — |
+| 13 | 配布したい | `.nar` にする | SSP の NAR 作成機能（6 段目で有効にした開発者用機能の「フォルダをドロップした際に更新ファイルやNARを作成」を ON にしてフォルダをドロップ） | — | — |
 
 - 辞書を持つ段階は 1〜12 段目。13 段目は手順だけの段階で、辞書の差分を持たない（`.nar` にする中身は 12 段目と同じ）。
 - 12 段目の辞書（＝`dic/` の全ファイル）が hello-pasta の配布辞書である。
@@ -35,12 +35,13 @@
 | 7 | `OnFirstBoot` | `0=0` |
 | 7 | `OnClose` | `0=user` |
 | 8 | `OnMouseDoubleClick` | `3=0, 4=Head` |
-| 9 | `OnChoiceSelectEx` | `0=おやつの話をする, 1=おやつの話, 2=OnMouseDoubleClick` |
+| 8 | `OnMouseMove` | `3=0, 4=Head` |
+| 9 | `OnChoiceSelectEx` | `0=おやつの話をする, 1=おやつの話, 2=つっつき反応その他` |
 
 - 検証は全段階で `OnBoot` を送ったうえで、この表の該当行のイベントを Reference 付きで 1 回ずつ送り、エラーにならずに応答が返ることを確かめる（応答の内容は照合しない）。`OnBoot` はこの表に載せない。
 - 載せるのはベースウェアから来る実イベントだけである。仮想イベント（ランダムトーク・時報）は載せない。
 - Reference は半角の `番号=値` を `, ` で区切って並べる。無ければ `—` と書く。
-- 8 段目の `Head` は仮の部位名である。`hello-pasta-shell-art` が当たり判定の部位名を確定したら、台詞とこの表を合わせる。
+- 8 段目の `Head` は、シェルの当たり判定（`shell/master/surfaces.txt`）に置いた部位名で、ショートカットのシーンの名前の末尾に付ける部位の名前でもある。部位名は `Head`・`Face`・`Body` の 3 つで、女の子も男の子も同じものを使う。足元には当たり判定を置かないので、そこを触ったときの Reference4 は空になり、部位の名前が付いた段は飛ばされる。
 
 ## ファイル名の規則
 
@@ -74,7 +75,7 @@
 `.nar` は SSP の NAR 作成機能で作る。
 
 1. 本体設定「一般」で開発者用機能を有効にする（6 段目で済ませている）。
-2. 本体設定「開発/その他」の「ディレクトリをドロップした際に更新ファイルや NAR を作成」を ON にする。
+2. 本体設定「開発/その他」の「フォルダをドロップした際に更新ファイルやNARを作成」を ON にする。
 3. ゴーストのフォルダを SSP にドロップする。
 
 手順の正本は UKADOC の SSP ヘルプである。
@@ -84,8 +85,10 @@
 
 ## 確かめるための道具
 
-読者が書いた辞書を、イベントや時刻を待たずに確かめるために、SSP の開発用パレット（[UKADOC SSP ヘルプ](https://ssp.shillest.net/ukadoc/ssphelp/dev-palette.html)）を使う。ここには「どの段でどの道具を使うか」だけを書き、操作の説明は入門ガイドに任せる。
+読者が書いた辞書を、イベントを待たずに確かめるために、SSP の開発用パレット（[UKADOC SSP ヘルプ](https://ssp.shillest.net/ukadoc/ssphelp/dev-palette.html)）を使う。ここには「どの段でどの道具を使うか」だけを書き、操作の説明は入門ガイドに任せる。
 
-- 6 段目: 本体設定「一般」で開発者用機能を有効にする（初出。13 段目の NAR 作成もこの設定を使う）。開発用パレット（`Ctrl+Shift+D`）の「現在時刻の仮想的変更」で、正時を待たずに時報を確かめる。
-- 7 段目: 開発用パレットの「スクリプト入力」に `\![raise,イベント名,Reference0,…]` を入れてイベントを起こす（`OnFirstBoot`・`OnGhostChanged` など。切り替えの相手のゴーストが手元に無くても試せる）。`OnClose` は「`\-` タグで終了しない」を ON にして繰り返し試す。
+- 6 段目: 本体設定「一般」で開発者用機能を有効にする（初出。7 段目のスクリプト入力と 13 段目の NAR 作成もこの設定を使う）。開発用パレット（`Ctrl+Shift+D`）の「現在時刻の仮想的変更」で、今の時刻の 59 分 30 秒を入れて Apply し、30 秒ほど待って時報を確かめる。確かめ終わったら Reset する。12 時の目印は 11 時 59 分 30 秒を入れれば見られる（入れ直しても余分な時報は出ない）。
+  - 調べの結果（2026-10-17・SSP 2.9.18・`pasta.dll` 0.4.0）: SSP は仮想時刻をリクエストのヘッダーには載せない。伝わるのは、プロパティ `system.year`〜`system.second` の値と、毎分・正時のイベント（`OnMinuteChange`・`OnHourTimeSignal`）が届く時機である。pasta は、合図の時機が OS の時計から外れたときにプロパティを読み、OS の時計とのずれを覚えて、時報の判定と日時変数に使う（[OnPastaClock](../../book/src/lua/shiori-events.md#onpastaclock仮想時刻の読み取り)）。
+  - 調べの結果（2026-10-18・SSP 2.9.18 `20261017-5`）: このビルドの「現在時刻の仮想的変更」は、SSP のプロセスの中の OS の時計そのものを仮想時刻にする。`act.req.date` も仮想時刻になるので、pasta はそれに直接従う（プロパティの読み取りは、書き換えない SSP のために残してある）。Apply・Reset は時刻の飛びとして数え、次の正時を決め直すので、入れ直しても余分な時報は出ない。おしゃべりの間隔は飛びを差し引いて数えるので、仮想時刻を進めても早まらない（[時刻の飛び](../../book/src/lua/shiori-events.md#時刻の飛び)）。
+- 7 段目: 開発用パレット（`Ctrl+Shift+D`。開発者用機能は 6 段目で有効にしてある）の「スクリプト入力」に `\![raise,イベント名,Reference0,…]` を入れてイベントを起こす（`OnFirstBoot`・`OnGhostChanged` など。切り替えの相手のゴーストが手元に無くても試せる）。`OnClose` は「`\-` タグで終了しない」を ON にして繰り返し試す。
 - 読者は 1 段目で初回起動を済ませているので、7 段目で足した `OnFirstBoot` は自然には呼ばれない。`profile/` を消して初期状態に戻す方法は案内しない（10 段目で保存した値も消えるため）。

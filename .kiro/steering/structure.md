@@ -169,7 +169,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │           ├── japanese_identifier_test.rs  # Lua基盤テスト
 │           └── ucid_test.rs         # Lua基盤テスト
 │   ├── pasta_lsp/           # LSP実装層
-│   │   ├── Cargo.toml       # pasta_lsp設定（tower-lsp, pasta_dsl依存）
+│   │   ├── Cargo.toml       # pasta_lsp設定（tower-lsp, pasta_dsl, pasta_check（既定 feature 無し）依存）
 │   │   ├── README.md        # クレート概要
 │   │   ├── tests/           # 外部化テスト（Phase A）
 │   │   └── src/
@@ -184,32 +184,33 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │   │       ├── document.rs  # ドキュメント状態管理
 │   │       ├── error.rs     # LangServerError型定義
 │   │       ├── server.rs    # PastaLangServer (tower-lsp trait実装)
-│   │       └── transport.rs # WASM/Nativeプラットフォーム抽象化
-│   ├── pasta_check/         # リリースCLIツール
-│   │   ├── Cargo.toml       # pasta_check設定（lexopt, md5, zip 依存）
+│   │       └── transport.rs # WASM/Nativeプラットフォーム抽象化（WASM の入口: 解析・辞書ファイルの選び出し・ゴースト全体の検査）
+│   ├── pasta_check/         # 辞書の検査の核（ライブラリ）＋CLIツール（validate・release）
+│   │   ├── Cargo.toml       # pasta_check設定（核: pasta_dsl, pasta_core, toml, serde, glob／feature cli: lexopt, md5, zip）
+│   │   ├── tests/           # CLI統合テスト・検査の規則のテスト・pasta_lua との一致テスト（validate_parity_test.rs）
 │   │   └── src/
+│   │       ├── lib.rs           # ライブラリの入口（validate を公開）
+│   │       ├── validate/        # 検査の核（ファイルシステム非依存・WASM 共有。config/discovery/syntax/transpile_rules/module_name/scenes/builtins/references/report）
 │   │       ├── main.rs          # CLIエントリーポイント
-│   │       ├── release.rs       # リリースビルドオーケストレーション
+│   │       ├── validate_cmd.rs  # validate サブコマンド（ghost/master のファイルを集めて核を呼ぶ・release の段 4 も使う）
+│   │       ├── release.rs       # リリースビルドオーケストレーション（6 段・段 4 が辞書の検査の関門）
 │   │       ├── balloon.rs       # 同梱バルーン判定（install.txt）
 │   │       ├── update_files.rs  # 更新ファイル（updates.txt）生成
 │   │       ├── nar.rs           # NAR（ZIP）アーカイブ作成
 │   │       └── copy.rs          # ファイルコピーユーティリティ
 │   └── pasta_sample_ghost/  # サンプルゴースト「hello-pasta」（publish=false）
-│       ├── Cargo.toml       # 画像生成・配布物作成用依存
+│       ├── Cargo.toml       # テスト用の依存だけ（絵を描くプログラムは持たない）
 │       ├── README.md        # クレート概要
 │       ├── RELEASE.md       # リリース手順
 │       ├── STAGES.md        # 入門ガイドの段階表（段階 N の辞書 = dic/01〜NN。.nar には入らない）
-│       ├── release.ps1      # ビルド＋配布パッケージ生成スクリプト（手元では動作確認用・リリース CI の build job も呼ぶ）
-│       ├── build.rs         # ビルドスクリプト
+│       ├── release.ps1      # ビルド＋配布パッケージ生成スクリプト（6 段。絵を生成する段は無い。手元では動作確認用・リリース CI の build job も呼ぶ）
+│       ├── art/             # 立ち絵の生成の記録（README.md）と設定画像 2 枚（.nar には入らない）
 │       ├── src/
-│       │   ├── lib.rs              # 公開API（画像＋surfaces.txt生成）
-│       │   ├── main.rs             # 配布物生成CLIエントリーポイント
-│       │   ├── image_generator.rs  # ピクトグラム画像生成
-│       │   ├── config_templates.rs # surfaces.txt生成
+│       │   ├── lib.rs              # テスト用モジュールの宣言だけ
 │       │   └── scripts.rs          # ghosts/hello-pasta 辞書(.pasta)の検証テスト
 │       ├── ghosts/           # サンプルゴースト本体（SSOT・配布物一式）
-│       │   └── hello-pasta/  # 手書きSSOT(descript/pasta.toml/dic/NN-*.pasta 12 段/install)＋生成物(dll/ライセンス表示/scripts は .gitignore 済み・画像は追跡)
-│       └── tests/            # 統合テスト・配布ファイル構成検証・全段階の検証（tutorial_stages_test.rs）
+│       │   └── hello-pasta/  # 手書きSSOT(descript/pasta.toml/dic/NN-*.pasta 12 段/install/shell/master の立ち絵 18 枚・surfaces.txt)＋生成物(dll/ライセンス表示/scripts は .gitignore 済み)
+│       └── tests/            # 統合テスト・配布ファイル構成検証・全段階の検証（tutorial_stages_test.rs）・立ち絵と当たり判定の検証（shell_assets_test.rs）
 ├── benches/                  # ベンチマークコード
 ├── editors/                  # エディタ拡張
 │   └── vscode/              # VSCode拡張（TypeScript + WASM統合）
@@ -217,7 +218,8 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       ├── tsconfig.json    # TypeScript設定
 │       ├── src/             # TypeScriptソース
 │       │   ├── extension.ts            # アクティベーション・エントリポイント
-│       │   ├── wasmBridge.ts           # WASMモジュールブリッジ
+│       │   ├── wasmBridge.ts           # WASMモジュールブリッジ（解析・ゴースト全体の検査の入口と型）
+│       │   ├── ghostValidator.ts       # ゴースト全体の検査の診断（保存・ファイルの増減で起動・300ms で束ねる・source "pasta validate"）
 │       │   ├── semanticTokensProvider.ts # セマンティックトークン提供
 │       │   ├── diagnosticsManager.ts   # 診断情報管理
 │       │   ├── documentSync.ts         # ドキュメント同期（200msデバウンス）
@@ -227,13 +229,18 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       └── wasm/             # pasta_lsp WASMバイナリ（ビルド生成物）
 ├── book/                     # 利用者マニュアル（mdBook・GitHub Pages 公開）
 │   ├── book.toml            # mdBook 設定（language=ja, 検索有効, site-url）
+│   ├── AUTHORING.md         # マニュアルの執筆規約（第 8 節は入門ガイドの章の決まり・画像の行）
+│   ├── SCREENSHOTS.md       # 入門ガイドの絵の撮影の手順の記録（撮る環境・16 枚の一覧・後片付け・撮り直す決まり。手作業で撮る）
 │   ├── package.json         # book ツールの npm 依存（vscode-textmate/oniguruma/jsdom・lockfile コミット・node_modules 非コミット）
 │   ├── src/                 # 章ソース（grammar/lua/getting-started/reference/debug）
 │   │   ├── img/claudia/     # 台詞部品の顔アイコン 16 枚＋LICENSE.txt（ponapalt/claudia・Unlicense）
+│   │   ├── img/getting-started/ # 入門ガイドの絵 16 枚（実機の SSP で写した PNG。撮り方は SCREENSHOTS.md）
 │   │   └── internals/       # 内部設計パート（コントリビュータ向け・末尾パート）
-│   ├── theme/               # head.hbs（日本語 bigram 検索 tokenizer ＋ pasta ハイライト中和の override ＋ Web フォント）・claudia.css（Claudia テーマ: light/navy の配色・部品・台詞・扉・狭幅・印刷）・claudia.js（テーマメニューを Auto/Light/Navy に絞る）
+│   ├── theme/               # head.hbs（日本語 bigram 検索 tokenizer ＋ pasta ハイライト中和の override ＋ Web フォント ＋ 中間の幅で目次を描く前に開き直す claudiaSidebarEarly）・claudia.css（Claudia テーマ: light/navy の配色・部品・台詞・扉・狭幅・印刷）・claudia.js（テーマメニューを Auto/Light/Navy に絞る・中間の幅で目次の開閉を次のページへ持ち越す）
 │   ├── tools/               # build-time Node（スキル references 生成 gen-skill-refs・リンク検証 link-check・bigram 索引再生成・pasta 構文ハイライト・台詞部品 talk/（話し手と表情の登録簿 talk.mjs・ビルド後の吹き出し変換 talk-html.mjs）・検証 verify-*・テーマの対比テスト theme-test 等）
 │   └── book/                # mdbook build 生成物（.gitignore 済み・CI で再生成）
+├── doc/
+│   └── release-notes/       # 版ごとのリリースノートの見どころ vX.Y.Z.md（GitHub Release の本文・版の更新と同じコミットで書く）と、書き方・内部の作業の決まり README.md
 ├── .kiro/                    # Kiro Spec-Driven設定
 │   ├── steering/            # ステアリング規約
 │   ├── settings/            # テンプレート・ルール
@@ -247,7 +254,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │   │   ├── manual.yml       # 利用者マニュアルの検査と GitHub Pages 公開
 │   │   ├── release.yml      # リリース CI（vX.Y.Z タグ契機・OIDC で crates.io/Marketplace へ公開・GitHub Release 作成）
 │   │   └── release-setup-check.yml # リリース CI のセットアップ確認（手動起動・公開しない）
-│   ├── scripts/release/     # リリース CI の job 補助スクリプト（verify-tag/publish-crate/publish-vsix/release-notes/github-release の .ps1）
+│   ├── scripts/release/     # リリース CI の job 補助スクリプト（verify-tag/publish-crate/publish-vsix/release-notes/github-release の .ps1）と、その検査 release-scripts-test.ps1（build.yml の release-scripts job で実行）
 │   └── release-ci-setup.md  # リリース CI の一回限りのセットアップ手順書
 ├── release.bat              # crates/pasta_sample_ghost/release.ps1 のバッチラッパー（ダブルクリック用）
 ├── release/                 # release.ps1 の出力先（.nar・pasta.dll.zip。.gitignore 済み・コミットしない）
@@ -308,7 +315,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 
 ### ファイルサイズ方針（俯瞰可能性）
 
-- **目安上限 600 行**: Rust ソース・テストファイルは 1 ファイルあたり概ね 600 行未満を保つ（`oversized-file-decomposition` で全ファイルを俯瞰可能サイズへ振る舞い不変分解済み）。
+- **目安上限 600 行**: Rust ソース・テストファイルは 1 ファイルあたり概ね 600 行未満を保つ（`oversized-file-decomposition` で全ファイルを俯瞰可能サイズへ振る舞い不変分解した。2026-10-17 の時点で、`pasta_check` の `balloon.rs`（1,070 行）だけが超えている）。
 - **分解の方向**: 肥大化したファイルは、フラットな単一ファイル → 同名のディレクトリモジュール（`mod.rs` + 責務別サブモジュール）へ展開する。例: `debug/dap.rs` → `debug/dap/{mod,codec,decode,encode,pending,resolver}.rs`。
 - **不変条件**: 分解はあくまで振る舞い不変（pub API・テスト結果を変えない）。新規実装でこの上限のために責務をまたぐ分割をしない。
 
@@ -322,7 +329,8 @@ pasta (workspace)
 ├── pasta_core          # 言語非依存層（レジストリ）
 ├── pasta_lua           # Luaバックエンド層（pasta_dsl + pasta_core依存）
 ├── pasta_shiori        # SHIORI DLLインターフェース層（src/actor/ = アクタースレッド・flume mailbox・marshaling・teardown・static MAILBOX 所有）
-├── pasta_lsp           # LSP実装層（WASM/Native対応）
+├── pasta_lsp           # LSP実装層（WASM/Native対応・pasta_check の検査の核を WASM で公開）
+├── pasta_check         # 辞書の検査の核（ライブラリ・pasta_dsl + pasta_core依存）＋CLI（validate・release）
 └── pasta_sample_ghost  # サンプルゴースト「hello-pasta」（publish=false）
 ```
 

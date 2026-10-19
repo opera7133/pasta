@@ -177,6 +177,106 @@ fn test_shiori_act_uses_config_spot_newlines() {
     );
 }
 
+#[test]
+fn test_shiori_act_uses_config_choice_newlines() {
+    let temp = copy_fixture_to_temp("with_ghost_config");
+    let runtime = PastaLoader::load(temp.path()).unwrap();
+
+    // with_ghost_config/pasta.toml has spot_newlines = 2.0 and choice_newlines = 2.5.
+    // 往復の戻り手番の字の前は spot_newlines の \n[200]、字の後の選択肢の前は
+    // choice_newlines の \n[250]。互いの幅に影響しないことを完全一致で見る。
+    // ウェイトのタグが入らないよう、台詞には句読点を含めない。
+    let result = runtime
+        .exec(
+            r#"
+        local SHIORI_ACT = require("pasta.shiori.act")
+        local actors = {
+            sakura = { name = "さくら" },
+            kero = { name = "うにゅう" },
+        }
+        local act = SHIORI_ACT.new(actors)
+        act:set_spot("sakura", 0)
+        act:set_spot("kero", 1)
+        act:talk(actors.sakura, "Hello")
+        act:talk(actors.kero, "Hi")
+        act:talk(actors.sakura, "Back")
+        act:choice("t1", "d1")
+        act:choice("t2", "d2")
+        return act:build()
+    "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        value_as_str(&result).as_deref(),
+        Some(r"\p[0]Hello\p[1]Hi\p[0]\n[200]Back\n[250]\![*]\q[d1,t1]\n\![*]\q[d2,t2]\e")
+    );
+}
+
+/// vertical-balloon-lines 5.1・5.2・5.6: SHIORI の act が `[ghost]` の `after_choice_newlines` を読み、
+/// 選択肢の後の選択肢の前と台詞の前の区切りに使う。
+#[test]
+fn test_shiori_act_uses_config_after_choice_newlines() {
+    let temp = copy_fixture_to_temp("with_ghost_config");
+    // fixture の [ghost] は末尾の節なので、足したキーは [ghost] に入る
+    let toml_path = temp.path().join("pasta.toml");
+    let mut toml = std::fs::read_to_string(&toml_path).unwrap();
+    toml.push_str("after_choice_newlines = 3.0\n");
+    std::fs::write(&toml_path, toml).unwrap();
+    let runtime = PastaLoader::load(temp.path()).unwrap();
+
+    let result = runtime
+        .exec(
+            r#"
+        local SHIORI_ACT = require("pasta.shiori.act")
+        local actors = { sakura = { name = "さくら" } }
+        local act = SHIORI_ACT.new(actors)
+        act:set_spot("sakura", 0)
+        act:talk(actors.sakura, "Pick")
+        act:choice("t1", "d1")
+        act:choice("t2", "d2")
+        act:talk(actors.sakura, "Next")
+        return act:build()
+    "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        value_as_str(&result).as_deref(),
+        Some(r"\p[0]Pick\n[250]\![*]\q[d1,t1]\n[300]\![*]\q[d2,t2]\n[300]Next\e")
+    );
+}
+
+/// pasta.toml の装い（font）から出力までの通し（actor-display-style 1.1・2.1）。
+/// 読み込んだ `STORE.actors` のアクターで組み立てると、装いのタグが書いた順に出て、
+/// 装いの無いアクターへ切り替えると `\f[default]` で戻る
+#[test]
+fn test_shiori_act_emits_config_actor_font() {
+    let temp = copy_fixture_to_temp("with_actor_font");
+    let runtime = PastaLoader::load(temp.path()).unwrap();
+
+    let result = runtime
+        .exec(
+            r#"
+        local SHIORI_ACT = require("pasta.shiori.act")
+        local STORE = require("pasta.store")
+        local oji, pasta = STORE.actors["おじさん"], STORE.actors["ぱすた"]
+        local act = SHIORI_ACT.new(STORE.actors)
+        act:set_spot("おじさん", 0)
+        act:set_spot("ぱすた", 0)
+        act:talk(oji, "やあ")
+        act:talk(pasta, "はい")
+        return act:build()
+    "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        value_as_str(&result).as_deref(),
+        Some(r"\p[0]\f[height,12]\f[color,90,110,140]\f[bold,1]やあ\p[0]\f[default]\n[150]はい\e")
+    );
+}
+
 // ============================================================================
 // Package Path Tests
 // ============================================================================

@@ -13,8 +13,8 @@
 - **pasta_lua**: Luaバックエンド層（pasta_dsl + pasta_core依存）
 - **pasta_shiori**: SHIORI DLLインターフェース層
 - **pasta_lsp**: LSP実装層（tower-lsp, WASM/Native対応）
-- **pasta_check**: リリースCLIツール（ゴーストパッケージング・NAR生成）
-- **pasta_sample_ghost**: サンプルゴースト「hello-pasta」（publish=false, 画像生成・配布物作成）
+- **pasta_check**: 辞書の検査の核（ライブラリ・ファイルシステム非依存で WASM でも動く）＋CLIツール（`validate`＝辞書の検査、`release`＝検査を関門にしたゴーストパッケージング・NAR生成）
+- **pasta_sample_ghost**: サンプルゴースト「hello-pasta」（publish=false, 配布物作成。立ち絵はコミットした素材）
 
 ### 主要依存関係
 
@@ -63,18 +63,22 @@
 
 **pasta_lsp:**
 - **pasta_dsl**: DSLパーサー層
+- **pasta_check**（`default-features = false`）: 辞書の検査の核。WASM の入口 `wasm_select_ghost_files`・`wasm_validate_ghost` から呼び、VSCode 拡張のゴースト全体の診断に使う
 - **tower-lsp 0.20**: LSPサーバーフレームワーク
 - **serde 1 / serde_json 1**: シリアライゼーション
 - **thiserror 2**: エラー型定義
 - **wasm-bindgen**: WASM対応（cfg(wasm32)）
 
 **pasta_check:**
-- **lexopt 0.3**: CLIパーサー
-- **md5 0.8**: ハッシュ計算（更新ファイル生成）
-- **zip 8.6**: NAR（ZIP）アーカイブ作成
+- **pasta_dsl / pasta_core**: 検査の核（pasta.dll と同じパーサー・シーン登録）
+- **toml 1 / serde 1 / glob 0.3**: 検査の核（pasta.toml の読み取り・入出力の形・`pasta_patterns` の照合）
+- **lexopt 0.3**: CLIパーサー（feature `cli`）
+- **md5 0.8**: ハッシュ計算（更新ファイル生成・feature `cli`）
+- **zip 8.6**: NAR（ZIP）アーカイブ作成（feature `cli`）
+- 既定の feature `cli` はバイナリ専用の依存だけを有効にする（ライブラリは WASM でも使うので含めない）。dev-dependency の `pasta_lua`（パス依存・publish で外れる）は pasta.dll との一致テスト用
 
 **pasta_sample_ghost:**
-- **image 0.25 / imageproc 0.26**: ピクトグラム画像生成
+- **png 0.18**（dev-dependency）: 立ち絵の検証テスト（大きさ・透過・表情間の画素一致）
 
 ### 開発環境
 - **tempfile 3**: テスト用一時ファイル生成
@@ -103,7 +107,7 @@ pasta (workspace)
 │   └── Encoding        # プラットフォーム別エンコーディング
 ├── pasta_shiori        # SHIORI DLLインターフェース
 ├── pasta_lsp           # LSP実装（WASM/Native）
-├── pasta_check         # リリースCLI（NAR生成・更新ファイル）
+├── pasta_check         # 辞書の検査の核＋CLI（validate・release＝NAR生成・更新ファイル）
 └── pasta_sample_ghost  # サンプルゴースト生成ツール
 ```
 
@@ -116,16 +120,16 @@ pasta (workspace)
 | pasta_lua          | Loader       | スクリプト読み込み・キャッシュ  |
 | pasta_shiori       | SHIORI       | DLLエクスポート、リクエスト処理 |
 | pasta_lsp          | LSP          | 構文ハイライト、診断、WASM対応  |
-| pasta_check        | CLI          | リリースパッケージング・NAR生成 |
-| pasta_sample_ghost | Distribution | サンプルゴースト画像生成・配布  |
+| pasta_check        | CLI          | 辞書の検査（核は WASM 共有）・リリースパッケージング・NAR生成 |
+| pasta_sample_ghost | Distribution | サンプルゴーストの素材・配布    |
 
 ### 設計哲学
 
 | 原則         | 内容                                   |
 | ------------ | -------------------------------------- |
-| UI独立性     | Wait/Syncはマーカーのみ、areka側で制御 |
+| UI独立性     | 待ちと同期の制御は宿主（SSP・areka）に任せる。pasta はさくらスクリプトを書くだけ |
 | 宣言的フロー | Call/Jumpで制御、if/while/forなし      |
-| Yield型      | 全出力はyield、Generator継続           |
+| まとめて返す | 場面の終わりか `＞yield` までの出力を 1 本のさくらスクリプトにまとめて返す（続きはコルーチンが持つ） |
 | 2パス変換    | Pass1: シーン登録、Pass2: コード生成（現行の段階構成は[内部設計: トランスパイルパイプライン](https://ekicyou.github.io/pasta/internals/transpiler.html)を参照） |
 
 **結果**: 完全なユニットテスト可能性を実現
@@ -162,7 +166,7 @@ pasta (workspace)
 - 依存ライブラリ: メジャーバージョン指定
 
 ### ライセンス
-- **MIT OR Apache-2.0**: デュアルライセンス
+- **MIT**
 - 依存関係ライセンス: 互換性確認済み
 
 ### 公開ポリシー
@@ -198,14 +202,14 @@ cargo test -p pasta_lua     # pasta_luaテスト
   - Rust キャッシュ: `Swatinem/rust-cache@v2`
   - アーティファクト: `pasta-dll-x86`, `pasta-dll-x64`（7日間保持）
 - **GitHub Actions**: `.github/workflows/manual.yml`（利用者マニュアル公開・build.yml と独立）
-  - `book/**`・`.github/workflows/manual.yml`・`.claude/skills/pasta-ghost-authoring/**`・`.claude/skills/pasta-lua-coding/**`・`crates/*/README.md`・`crates/pasta_sample_ghost/ghosts/hello-pasta/ghost/master/dic/**` の変更時に起動。スキル references 鮮度照合（`gen-skill-refs.mjs --check`）→ npm ci(book) → mdbook build → pasta 構文ハイライト → 台詞部品の変換（`talk/talk-html.mjs`）→ bigram 索引再生成 → リンク検証（`link-check.mjs`）→ tutorial-check → cargo test 構文ガード → verify-static/search（`--self-test` 付き）/content → ツール自己テスト（`book/tools` の `*-test.mjs` 全件）→ 旧版の生成（固定コミット `CLASSIC_REF` の `book/` を旧版のツールで `book/book/classic/` へ。新版の検査の後・失敗で中断。PR でも実行）→ GitHub Pages デプロイ（旧版は `https://ekicyou.github.io/pasta/classic/`）
+  - `book/**`・`.github/workflows/manual.yml`・`.claude/skills/pasta-ghost-authoring/**`・`.claude/skills/pasta-lua-coding/**`・`crates/*/README.md`・ルートの `README.md`・`SOUL.md`・`crates/pasta_sample_ghost/ghosts/hello-pasta/ghost/master/dic/**` の変更時に起動。スキル references 鮮度照合（`gen-skill-refs.mjs --check`）→ npm ci(book) → mdbook build → pasta 構文ハイライト → 台詞部品の変換（`talk/talk-html.mjs`）→ bigram 索引再生成 → リンク検証（`link-check.mjs`）→ tutorial-check → cargo test 構文ガード → verify-static/search（`--self-test` 付き）/content → ツール自己テスト（`book/tools` の `*-test.mjs` 全件）→ 旧版の生成（固定コミット `CLASSIC_REF` の `book/` を旧版のツールで `book/book/classic/` へ。新版の検査の後・失敗で中断。PR でも実行）→ GitHub Pages デプロイ（旧版は `https://ekicyou.github.io/pasta/classic/`）
   - permissions: `pages: write` / `id-token: write` / `contents: read`。Pages 初回は repo Settings で手動有効化が必要
 - **GitHub Actions**: `.github/workflows/release.yml`（リリース CI・release-ci）
-  - リリースタグ `vX.Y.Z`（数字 3 つ）の push だけで起動。job は verify（タグ・ワークスペース版・`package.json` 版の一致と main からの到達性）→ gate（`build.yml` を `workflow_call`）→ build → publish-crates／publish-vsce → github-release → report
-  - **成果物**: build が CI 上でソースから `pasta.dll.zip`（`pasta.dll`＋`THIRD_PARTY_LICENSES.txt`）・`hello-pasta.nar`・`pasta-vscode-X.Y.Z.vsix` を作り、artifact `release-assets` で後続 job に渡す。github-release が GitHub Release（題名 `pasta vX.Y.Z`・リリースノートはコミット履歴から生成）を作って 3 つを添付する
+  - リリースタグ `vX.Y.Z`（数字 3 つ）の push だけで起動。job は verify（タグ・ワークスペース版・`package.json` 版の一致と main からの到達性・タグの版の見どころのファイル `doc/release-notes/vX.Y.Z.md` の有無）→ gate（`build.yml` を `workflow_call`）→ build → publish-crates／publish-vsce → github-release → report
+  - **成果物**: build が CI 上でソースから `pasta.dll.zip`（`pasta.dll`＋`THIRD_PARTY_LICENSES.txt`）・`hello-pasta.nar`・`pasta-vscode-X.Y.Z.vsix` を作り、artifact `release-assets` で後続 job に渡す。github-release が、前のリリースタグからのコミットの件名から詳しいリリースノート `release-notes-vX.Y.Z.md`（接頭辞を外し、内部の作業を除く）を作り、GitHub Release（題名 `pasta vX.Y.Z`・本文は見どころのファイル `doc/release-notes/vX.Y.Z.md` に、詳しいリリースノートへのリンクと件数の行を足したもの）を作って、3 つの配布物と詳しいリリースノートの 4 つを添付する。見どころの書き方と内部の作業の決まりは `doc/release-notes/README.md`
   - **認証は OIDC**: crates.io は Trusted Publishing、Marketplace は Azure のマネージド ID（フェデレーション資格情報）。長期のトークン（crates.io の API トークン・Marketplace の PAT）は使わず、開発機（`CARGO_REGISTRY_TOKEN`・`VSCE_PAT`）にも GitHub の secret にも置かない。crates.io の短命トークンは job の中で auth の直後に発行し、直後の publish step だけに渡す。crates.io・Marketplace の公開 job（publish-crates・publish-vsce）は environment `release` で走る
   - 公開先ごとに「公開済みなら飛ばす」冪等な処理で、失敗した job の再実行で続きから回復する。job の補助スクリプトは `.github/scripts/release/*.ps1`（pwsh 7）
-  - 一回限りのセットアップ手順は `.github/release-ci-setup.md`、その確認は `.github/workflows/release-setup-check.yml`（手動起動・公開しない）。リリース手順は `crates/pasta_sample_ghost/RELEASE.md`
+  - 一回限りのセットアップ手順は `.github/release-ci-setup.md`、その確認は `.github/workflows/release-setup-check.yml`（手動起動・公開しない）。人が読むリリース手順書は `crates/pasta_sample_ghost/RELEASE.md`。エージェントが実行する手順（版の決定 → 版の更新の PR → リリースタグの push → リリース CI の結果の確認）は `release` スキル（`/release [X.Y.Z]`）にあり、手順を直すときはスキルを直す
   - 手元の `release.ps1`・`npm run package` の成果物は動作確認用で、コミットしない（`release/` とサンプルゴーストの生成物は `.gitignore` 済み）。`Cargo.lock` はコミットする
 
 ## 利用者マニュアル（ドキュメントサイト `book/`）
@@ -215,7 +219,7 @@ cargo test -p pasta_lua     # pasta_luaテスト
 - **mdBook v0.5.3**: Markdown → 静的 HTML/CSS/JS。生成物 `book/book/` は `.gitignore` 済み（CI で再生成）
 - **日本語 bigram 検索**: build-time Node スクリプト（`book/tools/bigram-index/`）が mdBook 同梱 elasticlunr 索引を 2-gram で再生成。索引ビルダとクエリ側（`theme/head.hbs`）が単一 `tokenize.mjs` を共有（不一致は検索破綻）
 - **スキル references 生成**: `book/tools/gen-skill-refs.mjs` が対応表（`GENERATION_MAP`）に従い `book/src/` の章から 2 スキル（`pasta-ghost-authoring`・`pasta-lua-coding`）の `references/` 生成ファイルを書き出す（先頭行に生成マーカー・手編集禁止）。`--check` は書き込まずに鮮度を照合し、古ければ exit 1（**改行 LF 正規化**で比較）
-- **リンク検証**: `book/tools/link-check.mjs` がマニュアル章と 2 スキルの相対リンク・アンカーを検証する。鮮度照合とあわせて `workflow.md` DoD の条件付き「Manual Sync Gate」と結線し、失敗で完了を中断
+- **リンク検証**: `book/tools/link-check.mjs` がマニュアル章のリンク（章のファイルと見出し `#…` の実在）、2 スキルの相対リンク・アンカー、読者に届く文書（クレートの README・ルートの `README.md`・`SOUL.md`・2 スキル）にある公開マニュアルの URL を検証する。見出しの `id` が mdBook の出力と合うことは、自己テスト（`link-check-test.mjs`）が CI でビルドの後に全章を突き合わせる。鮮度照合とあわせて `workflow.md` DoD の条件付き「Manual Sync Gate」と結線し、失敗で完了を中断
 - **pasta 構文ハイライト**: build-time Node スクリプト（`book/tools/highlight/`）が VSCode TextMate 文法（`editors/vscode` の SSOT・読み取り再利用）で `language-pasta` ブロックをトークナイズし highlight.js 互換クラスの span を静的 HTML へ焼き込む（決定論・冪等・入れ子 lua は vendor 文法で二段トークナイズ）。`theme/head.hbs` が book.js の無条件再ハイライトを中和し事前 span を保持（正準 `neutralizer.mjs` の逐語ミラー）。`book/` 初の npm devDependency（`vscode-textmate`/`vscode-oniguruma`/`jsdom`・`package-lock.json` コミット・`node_modules` 非コミット・CI は `npm ci`）。WASM は build-time のみで公開成果物にランタイム依存を持ち込まない
 - **正の分離**: 利用者向け仕様（文法・公開 Lua API・`pasta.toml`）の唯一の権威はマニュアル（`book/src/`）。スキルの規範部分はマニュアルからの生成物、README は開発者向けの入口
 - **内部設計パート**（`book/src/internals/`）: コントリビュータ向け・権威は実装＋本パート
@@ -277,6 +281,6 @@ local value = act:get_property("baseware.version")
 
 - `pasta.shiori.event.callback` モジュールが ID 管理・待機の登録・タイムアウトを担当し、再開は通常のイベントと同じ `EVENT.drive` に任せる
 - 応答イベント（`OnPastaCallBack{N}`）で待機中のシーンを再開し、出力が応答になる
-- OnSecondChange の既定ハンドラが期限切れの待機を掃引する（理由付きのタイムアウトは `X-Error-Reason` 付きの 500 を返す）
+- OnSecondChange の既定ハンドラが期限切れの待機を掃引する（理由付きのタイムアウトは `【時間切れ：…】` の表記を `200 OK` ＋ `X-Error-Reason` で返す。`[logging] balloon_warning = false` なら従来どおり `X-Error-Reason` 付きの 500）
 
 詳細: `.claude/skills/pasta-lua-coding/SKILL.md`

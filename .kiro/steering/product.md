@@ -11,7 +11,7 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 
 ## 機能の優先順位
 
-> 以下は初期の Phase 0〜4 の区分で、2026-06 までの記録。それ以降の進捗と現在の主題は [roadmap.md](roadmap.md)（Phase 1〜12）が正本。
+> 以下は初期の Phase 0〜4 の区分で、2026-06 までの記録。それ以降の進捗と現在の主題は [roadmap.md](roadmap.md)（Phase 1〜13）が正本。
 
 ### Phase 0: 一次設計の再構築 ✅ 完了
 **最終更新**: 2026-01-30
@@ -21,7 +21,7 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - [x] シーンジャンプテーブル設計の修正 → `scene-search-integration` 完了
 - [x] 宣言的制御フロー（Call/Jump文）の再実装 → `act-impl-call` 完了
 
-**完了仕様**: 156件（2026-10-10 時点・`.kiro/specs/completed/` に格納）
+**完了仕様**: 171件（2026-10-17 時点・`.kiro/specs/completed/` に格納）
 
 **主要成果**:
 - ✅ **act-impl-call** - `ACT_IMPL.call` 4段階優先順位検索実装
@@ -43,12 +43,11 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - [x] SHIORI インターフェース（pasta_shiori）- DLL エクスポート
 
 ### Phase 2: コア機能拡張（進行中）🔄
-**最終更新**: 2026-10-10（現行バージョン v0.3.7）
-
-**繰り返し仕様**:
-- 🔁 **release-workflow** - リリース手順（版の決定 → 版の更新の PR → リリースタグの push → リリース CI の結果の確認。`/kiro-impl` 実行のたびにタスクリセット、永続的に未完了）
+**最終更新**: 2026-10-17（現行バージョン v0.4.0）
 
 **完了仕様**:
+- ✅ **release-workflow** - リリース手順（版の決定 → 版の更新の PR → リリースタグの push → リリース CI の結果の確認）。手順は `release` スキル（`/release`）へ移した
+- ✅ **release-notes-highlights** - リリースの本文を、見どころ（`doc/release-notes/vX.Y.Z.md`）を Claudia の口調で紹介する文章にし、全件の詳しいリリースノートを Assets に添付する
 - ✅ **pasta-cue-dsl-extension** - キューコマンド行(`!`)のDSLパース機能追加
 - ✅ **release-workflow-dll-zip-fix** - リリースワークフローDLL ZIP修正
 - ✅ **yield-continuation-token** - `＞チェイントーク` / `＞yield` 継続トーク機能（GLOBAL テーブル L3 登録）
@@ -83,7 +82,7 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - ✅ **vscode-extension-release** / **vscode-trailing-newline** - 拡張リリース・末尾改行整備
 
 **保守性・基盤整備**:
-- ✅ **oversized-file-decomposition** - 巨大 Rust ファイルを俯瞰可能サイズへ振る舞い不変分解（全ファイル < 600 行）
+- ✅ **oversized-file-decomposition** - 巨大 Rust ファイルを俯瞰可能サイズへ振る舞い不変分解（分解した時点で全ファイル < 600 行）
 - ✅ **pasta-config-restructure** - `pasta.toml` をデフォルトプロファイルモデルへ再整理（記述負担軽減）
 - ✅ **budouy-migration** - 分かち書きクレートを budoux → budouy へ移行
 - ✅ **review-improvement-loop** - コードベース総合レビュー＆改善ループ完走（64 セル）
@@ -106,4 +105,4 @@ Memories of pasta twine together—now and then a knot, yet always a delight.
 - [ ] arekaへの投入（`ukagaka-desktop-mascot`メタ仕様）
 - [ ] MCPまたはLLMとの連携
 
-**現在地**: 現行バージョン v0.3.7。現在の主題は [roadmap.md](roadmap.md) の Phase 11 の残り（属性セマンティクスと失敗の出力）・Phase 12（入門ガイド）。リリースの CI 化は完了し、CI での初回リリースが残る
+**現在地**: 現行バージョン v0.4.0（2026-10-17 リリース。主題は「入門者にやさしく」）。初めて辞書を書く人が迷わず進めて、書き間違えたときに原因が分かることを優先した版で、hello-pasta の新しいシェル、9 段目の選択肢の直し、撫で・つつきの反応のショートカット、実行時の失敗の出力の一本化、止まるエラーのバルーン表示、SSP を起動しない辞書の検査（`pasta_check validate`）、シェルの説明の章、入門ガイドの絵が入った。次は 0.4.1（致命的でない不具合。範囲は [roadmap.md](roadmap.md) の「0.4.1 の範囲」）と、0.5.0 の目標（別リポジトリで開発中の areka でノベルゲームが作れるようになること）。属性セマンティクス（シーン属性・Call の属性フィルター）は 0.5.0 の道筋に入った。リリースの CI 化と CI での初回リリース（v0.3.8）は完了した
