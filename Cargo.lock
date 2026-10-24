@@ -960,7 +960,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_check"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "ctor",
  "getrandom 0.4.3",
@@ -978,7 +978,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_core"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "fast_radix_trie",
  "rand",
@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_dsl"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "pest",
  "pest_derive",
@@ -996,7 +996,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_lsp"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "pasta_check",
  "pasta_dsl",
@@ -1010,9 +1010,10 @@ dependencies = [
 
 [[package]]
 name = "pasta_lua"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "budouy",
+ "cc",
  "ctor",
  "flate2",
  "glob",
@@ -1033,6 +1034,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tracing-test",
+ "unicode-segmentation",
  "unicode-width",
  "windows-sys 0.61.2",
  "zip",
@@ -1040,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_sample_ghost"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "ctor",
  "pasta_lua",
@@ -1052,7 +1054,7 @@ dependencies = [
 
 [[package]]
 name = "pasta_shiori"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "arc-swap",
  "ctor",
@@ -1890,6 +1892,12 @@ name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
 name = "unicode-width"

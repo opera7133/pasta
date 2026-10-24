@@ -123,8 +123,7 @@ fn uri_to_pasta_path_strips_scheme_and_decodes() {
     );
 }
 
-// ===========================================================================
-// task 6.3: uri 正規化の特性化テスト（requirements 2.1/7.1）。
+// ====================================================================// task 6.3: uri 正規化の特性化テスト（requirements 2.1/7.1）。
 //
 // 本クラスタは「VSCode uri → 索引キー」正規化の **契約**を固定する。とりわけ
 // `uri_to_pasta_path` が `std::path::absolute`（純粋・字句的）を用い、
@@ -136,8 +135,7 @@ fn uri_to_pasta_path_strips_scheme_and_decodes() {
 // 索引キー側の `\`→`/`・Windows 大小無視は `SourceMap::scene_at` 内の
 // `canonicalize_pasta_file` が担うため、別形式の uri/パスが「同一の論理ファイル」を
 // 指す限り、`map_with_index` で張った索引を介して **同一シーン**へ解決する。
-// ===========================================================================
-
+// ====================================================================
 /// 1. Windows パス + URI エンコード等価性: 同一論理ファイルを指す多様な形式の
 ///    uri/パスが、すべて同一の索引キーへ正規化され同一シーンへ解決する。
 ///
@@ -294,3 +292,43 @@ fn nonexistent_path_still_resolves_fs_independent() {
 
 const TEST_FILE: &str = if cfg!(windows) { "C:/work/dic/talk.pasta" } else { "/work/dic/talk.pasta" };
 const TEST_URI: &str = if cfg!(windows) { "file:///C:/work/dic/talk.pasta" } else { "file:///work/dic/talk.pasta" };
+// ====================================================================// scene-play-event task 2.1: `resolve_position`（requirements 2.2-2.7/5.3）。
+// ====================================================================
+/// `base`（ghost/master 相当の絶対パス）配下の `dic/boot.pasta` に索引を張る。
+fn boot_fixture() -> (std::path::PathBuf, SourceMap) {
+    let base = std::path::absolute("ghost_fixture/ghost/master").unwrap();
+    let file = base.join("dic/boot.pasta");
+    (base, map_with_index(&file.to_string_lossy()))
+}
+
+#[test]
+fn resolve_position_joins_relative_path_to_base_dir() {
+    let (base, map) = boot_fixture();
+    let want = Some(("会話_1".to_string(), "__start__".to_string()));
+    assert_eq!(resolve_position(&map, &base, "dic/boot.pasta", 15), want);
+    assert_eq!(resolve_position(&map, &base, r"dic\boot.pasta", 15), want);
+}
+
+#[test]
+fn resolve_position_uses_absolute_path_as_is() {
+    let (base, map) = boot_fixture();
+    let abs = base.join("dic/boot.pasta").to_string_lossy().into_owned();
+    let other_base = std::path::absolute("elsewhere").unwrap();
+    assert_eq!(
+        resolve_position(&map, &other_base, &abs, 25),
+        Some(("会話_1".to_string(), "挨拶_1".to_string()))
+    );
+}
+
+#[test]
+fn resolve_position_returns_none_when_not_found() {
+    let (base, map) = boot_fixture();
+    // 索引に無いファイル・シーンの無い行
+    assert_eq!(resolve_position(&map, &base, "dic/other.pasta", 15), None);
+    assert_eq!(resolve_position(&map, &base, "dic/boot.pasta", 100), None);
+    // 索引の無いマップ
+    assert_eq!(
+        resolve_position(&SourceMap::new(), &base, "dic/boot.pasta", 15),
+        None
+    );
+}

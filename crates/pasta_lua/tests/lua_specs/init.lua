@@ -56,9 +56,12 @@ local specs = {
     "kick_local_composite_test",          -- KICK.try_dispatch local-composite 分岐テスト (pasta-scene-kick-from-cursor 3.1)
     "kick_reload_shiori_test",            -- KICK.try_dispatch リロード sentinel 分岐テスト (pasta-scene-kick-from-cursor 4.3)
     "virtual_dispatcher_kick_force_test", -- KickForceGate dispatch 入口割り込み許可ゲートテスト (pasta-scene-kick 4.3)
+    "virtual_dispatcher_pause_gate_test", -- 止める門・restart_timers テスト (ontalk-suppression 2.1)
     "virtual_dispatcher_kick_hook_test", -- KickDispatchHook dispatch 前段キック起動＋preempt 結合テスト (pasta-scene-kick 4.4)
     "kick_position_path_inheritance_test", -- 位置パスの dispatch 越し kick 継承テスト (pasta-scene-kick-from-cursor 6.2)
     "mouse_test",                         -- event.mouse 候補の名前・アクター名テスト (touch-poke-shortcuts 3.1)
+    "mouse_pause_test",                   -- 止めている間のつつき・撫での既定ハンドラテスト (ontalk-suppression 2.2)
+    "auto_talk_pause_test",               -- 自動トークの停止・再開と別名のテスト (ontalk-suppression 2.3)
     "store_appearance_test",              -- STORE.appearance 外見状態のセッション常駐テスト (actor-surface-restore 1.3)
     "appearance_test",                    -- pasta.shiori.appearance タグ走査・サーフェス観測テスト (actor-surface-restore 2.1)
     "act_dynamic_ref_test",               -- 動的参照のキー解決・警告テスト (dynamic-word-reference 2.1)
@@ -72,6 +75,10 @@ local specs = {
     "virtual_clock_test",                 -- pasta.shiori.clock 仮想時刻のずれ・合図・読み取り・時刻と日付の表テスト (tutorial-ssp-gaps 2.1)
     "event_clock_hook_test",              -- EVENT.fire 入口の時計のフック（合図と返事を見せる）テスト (tutorial-ssp-gaps 3.1)
     "actor_style_test",                   -- pasta.shiori.actor_style 装いの出し入れ・出し直し・素通しテスト (actor-display-style 2.3)
+    "scene_play_event_test",              -- co_exec_exact・co_exec_registered・既定のハンドラのテスト (scene-play-event 3.1, 3.2)
+    "chain_talk_interrupt_test",          -- 続きの決まり・台詞の判定・はっきり捨てる印・予約の確かめ・中断の台詞のテスト (chain-talk-interrupt 3.2・3.3)
+    "external_control_event_test",        -- 外からの操作のイベントの既定のハンドラのテスト (external-control-events 1.2)
+    "reg_handler_chain_test",             -- REG:register で重ねたハンドラ（鎖）のテスト (reg-handler-chain 1.1, 2.x)
     -- 将来のテストスイートをここに追加
     -- "code_generator_test",
     -- "context_test",

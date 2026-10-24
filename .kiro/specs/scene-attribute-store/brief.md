@@ -201,3 +201,31 @@ Call ターゲットの後ろに `＆key＝value` 形式のフィルターを付
 - **見つけた穴・古くなった記述**:
   - シーン 1 つを処理する `process_global_scene` は `transpiler.rs` の 214 行に動いた（前回は 202 行）。空の絞り込み条件を作るのは `crates/pasta_lua/src/search/context.rs` の 121 行（前回は 96 行）。
   - マニュアルの「内部に記録される」は `book/src/grammar/block-structure.md` の 271 行と 303 行に動いた。宣言行の属性では今も成り立たない。
+
+## 申し送り（2026-10-21 の discovery「PastaDSL機能ヒアリング」より）
+
+- 属性の新しい読み手として `scene-pick-modes`（同名シーンの重み `＆重み：5` と定義順の巡回。2026-10-21 起票）が加わる。数の値（重み）を読む型の解釈と、ローカルシーン・名前なしの `＊` への受け継ぎを、要件の材料にする。
+- 2026-10-21 の開発者の決定: `scene-pick-modes` は `＆重み` だけを先に特別扱いで読まない。この spec の後に入る。この spec の要件で、次の 2 つを決めておく。`scene-pick-modes` はその規則に従う。
+  - ファイルの先頭の `＆重み` を、シーンが受け継ぐか
+  - 全角の数字（`５`）を数として読むか
+- ghost_dev の作者は、場面の側に条件を書く形（`＊OnMouseClick　＆r4：セキュリティボール`）も想像した。条件の向きは `call-attribute-filter` の申し送りに書いた。
+
+## 2026-10-23 棚卸の再測定（main 8fc9bdff）
+
+- **前提の変化**: `scene-play-event` が入り、`scene.lua` を待つ理由が無くなった。今すぐ始められる。入ったものは次のとおり。
+  - Lua 側のシーン表 `crates/pasta_lua/pasta_scripts/pasta/scene.lua` は 240 → 266 行。名前の完全一致で探す `SCENE.co_exec_exact` がローカルシーンの名前も受けるようになり（230〜251 行。戻り値に「どちらが見つからなかったか」が増えた）、登録名の組から再生する `SCENE.co_exec_registered`（258 行）が増えた。属性を読む口を足すときは、この 2 つと並べて置ける。
+  - シーン表 `crates/pasta_core/src/registry/scene_table.rs`（483 → 539 行）に、ローカルシーンを持つグローバルシーンだけを選ぶ `resolve_global_owning_local_exact`（297 行）が増えた。グローバルシーンの属性で絞り込む引数を持つ（今は空で呼ばれる）。候補の控えのキーに「持ち主のローカル名」が増えた（22〜27 行）。
+  - 検索の入口 `crates/pasta_lua/src/search/context.rs` は 788 → 1,017 行（本体は 437 行まで、残りは中のテスト）。空の絞り込み条件を作るのは 135 行と、新しい `search_local_scene_exact` の 215 行。
+  - `ontalk-suppression`・`pasta-check-release-asset` は、この spec のファイルに触れていない。宣言行の解析・シーンの Lua を出すコード生成・トランスパイラの状態・実行時の登録表を作る `finalize.rs`・登録表 `scene_registry.rs` は、前回から変わっていない。
+- **触るファイル**: 前回と同じ。行数は `parse_scene.rs` 426、`scope_gen.rs` 445、`crates/pasta_lua/src/context.rs` 454、`transpiler.rs` 339、`scene.lua` 266、`finalize.rs` 358（登録表を作り直すのは 182 行のまま）、`scene_registry.rs` 576、`scene_types.rs` 36。1,000 行に近いものは無い（この spec は検索の入口を触らない）。
+- **規模**: 15〜18 タスクのまま。
+- **先に要るもの**: なし。0.4.2 の残り（`external-control-events`・`chain-talk-interrupt`・`reg-handler-chain`）とはソースを共有しないので、0.5.0 を今のゴールに含めるなら、そのどれとも同じウェーブに置ける。`recommend-menu-scenes` とは、あちらが `scene.lua` に関数を足すときだけ重なる。
+  - 0.5.0 の側の重なり（前回と同じ）: `call-attribute-filter`（`scene.lua`・`scene_types.rs`）、`cue-command-runtime`（宣言行の解析・コード生成・トランスパイラ・見本の期待値）、`scene-pick-modes`、`shell-element-click`（あちらが `scene.lua` に口を足す場合）。
+  - 隙間の spec との重なり（今回はじめて数えた）: `ponytail-dsl-parser`（`parse_scene.rs`）、`ponytail-lua-transpiler`（`scope_gen.rs`・`context.rs`・`transpiler.rs`）、`ponytail-core-registry`（`scene_registry.rs`・`scene_types.rs`）、`ponytail-lua-loader`（`runtime/finalize.rs`）、`ponytail-lua-scripts`（`scene.lua`）。宣言行の属性の位置を編集中の解析や着色で扱うなら `ponytail-editor-tooling` も。どれも同じウェーブに置けない。
+- **種別**: 機能（書いた属性が、実行時にはどこにも残らない）。
+- **要件定義のモデル**: Fable のまま。後から戻しにくいのは「属性の倉の意味」と Lua から読む口（`call-attribute-filter`・`cue-command-runtime`・`scene-pick-modes` が上に乗る）。値の型、ローカルシーンと名前なしの `＊` への受け継ぎ、書いた順と重なったときの優先、の 3 つが絡み、推奨案がまだ無い。今回の変化は、このどれにも触れていない。
+- **分割の案**: 不要。
+- **見つけた穴・古くなった記述**:
+  - ロードマップの「0.5.0 の 3 本とも、隙間の spec とファイルが重ならない」（`roadmap.md` 192 行）と「`ponytail-lua-loader` は 0.5.0 とほぼ重ならない」（147 行）は、この spec については誤り（上の 5 本と重なる）。
+  - ロードマップの「`scene.lua` を `scene-play-event` と共有するので、その後に置く」（115・283・290 行）は、`scene-play-event` が入ったので外せる。
+  - 2026-10-17 の節の行番号: `scene.lua` 240 → 266 行、空の絞り込み条件 121 → 135 行。

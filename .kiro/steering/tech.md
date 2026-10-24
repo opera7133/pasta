@@ -38,13 +38,15 @@
 - **serde 1 / serde_json 1**: シリアライゼーション
 - **glob 0.3**: ファイルパターンマッチ
 - **flate2 1.x**: gzip圧縮（キャッシュ等）
-- **zip 8.6 (deflate)**: pasta_scripts 自己展開（起動時 zip 解凍）・ビルド時の決定論 zip 生成
+- **zip 9.0 (deflate)**: pasta_scripts 自己展開（起動時 zip 解凍）・ビルド時の決定論 zip 生成
 - **md5 0.8**: ビルド時の基準ダイジェスト算出（pasta_scripts 自己展開のドリフト検知、build/dev-dependency。ランタイムはマーカー文字列比較のみで md5 不使用）
 - **budouy 0.2.2**: 日本語改行位置推定（BudouX、vendored-models）
 - **unicode-width 0.2.2**: Unicode文字幅計算
+- **unicode-segmentation 1.13.3**: 書記素クラスタの切り出し（トークの文字の単位）
 - **socket2 0.5**: debug transport 待受ソケットの `SO_REUSEADDR` 設定（Windows 以外。Windows では二重 bind を許してしまうため立てない）・非ブロック化（reload 時の再バインド堅牢化）
 - **tracing 0.1 / tracing-appender 0.2 / tracing-subscriber 0.3**: ロギング・診断
-- **windows-sys 0.61**: Windows API（Shift_JISエンコーディング等、cfg(windows)）
+- **windows-sys 0.61**: Windows API（Shift_JISエンコーディング等、cfg(windows)・features: Win32_System_LibraryLoader, Win32_System_Diagnostics_Debug（ffi.load の置き換え）。dev-dependency では Win32_Storage_FileSystem, Win32_System_Registry（8.3 名・長いパスの設定の確かめ））
+- **cc 1**（dev-dependency）: FFI テスト用の DLL をテスト中にビルドする
 - **luacheck v1.2.0**: 静的解析ツール（scriptlibs/）
 - **lua_test**: BDDスタイルテストフレームワーク（scriptlibs/）
 
@@ -57,6 +59,7 @@
 - **windows-sys 0.61**: Windows DLL API（cfg(windows)・Win32_System_Threading 含む）
 - **flume 0.12**: アクター mailbox（async `recv_async` ＋同期 `recv_timeout` 兼用・`Sender: Send+Sync+Clone`）
 - **arc-swap 1**: `static MAILBOX` の lock-free スロット（送信パスに Mutex を置かない）
+- **embed-resource 3**（build-dependency）: pasta.dll に VERSIONINFO（ファイル/製品バージョン）とアイコン（`res/pasta.ico`）を埋め込む（Windows ターゲットのみ）
 - **wintf-winmsg-executor 0.0.3**: アクタースレッドの `block_on` メッセージループ（`!Send` VM を pin）
 
 > **エンジン駆動モデル**: `pasta_lua` の `!Send` Lua VM を `pasta_shiori` 所有のアクタースレッドへ pin し、SHIORI スレッドとは flume mailbox の CH marshaling（GET=block-on-reply／NOTIFY=即204／drop・timeout→204）で通信する。`unsafe impl Send/Sync` は構造的に撤去済み。さくらスクリプト描画は pasta_lua に物理維持（Lua 集約）し、レンダラはアダプタ注入で論理デカップリング（`pasta-actor-runtime` で確立）。
@@ -74,7 +77,7 @@
 - **toml 1 / serde 1 / glob 0.3**: 検査の核（pasta.toml の読み取り・入出力の形・`pasta_patterns` の照合）
 - **lexopt 0.3**: CLIパーサー（feature `cli`）
 - **md5 0.8**: ハッシュ計算（更新ファイル生成・feature `cli`）
-- **zip 8.6**: NAR（ZIP）アーカイブ作成（feature `cli`）
+- **zip 9.0**: NAR（ZIP）アーカイブ作成（feature `cli`）
 - 既定の feature `cli` はバイナリ専用の依存だけを有効にする（ライブラリは WASM でも使うので含めない）。dev-dependency の `pasta_lua`（パス依存・publish で外れる）は pasta.dll との一致テスト用
 
 **pasta_sample_ghost:**
@@ -206,7 +209,7 @@ cargo test -p pasta_lua     # pasta_luaテスト
   - permissions: `pages: write` / `id-token: write` / `contents: read`。Pages 初回は repo Settings で手動有効化が必要
 - **GitHub Actions**: `.github/workflows/release.yml`（リリース CI・release-ci）
   - リリースタグ `vX.Y.Z`（数字 3 つ）の push だけで起動。job は verify（タグ・ワークスペース版・`package.json` 版の一致と main からの到達性・タグの版の見どころのファイル `doc/release-notes/vX.Y.Z.md` の有無）→ gate（`build.yml` を `workflow_call`）→ build → publish-crates／publish-vsce → github-release → report
-  - **成果物**: build が CI 上でソースから `pasta.dll.zip`（`pasta.dll`＋`THIRD_PARTY_LICENSES.txt`）・`hello-pasta.nar`・`pasta-vscode-X.Y.Z.vsix` を作り、artifact `release-assets` で後続 job に渡す。github-release が、前のリリースタグからのコミットの件名から詳しいリリースノート `release-notes-vX.Y.Z.md`（接頭辞を外し、内部の作業を除く）を作り、GitHub Release（題名 `pasta vX.Y.Z`・本文は見どころのファイル `doc/release-notes/vX.Y.Z.md` に、詳しいリリースノートへのリンクと件数の行を足したもの）を作って、3 つの配布物と詳しいリリースノートの 4 つを添付する。見どころの書き方と内部の作業の決まりは `doc/release-notes/README.md`
+  - **成果物**: build が CI 上でソースから `pasta.dll.zip`（`pasta.dll`＋`THIRD_PARTY_LICENSES.txt`）・`hello-pasta.nar`・`pasta-vscode-X.Y.Z.vsix`・`pasta_check.zip`（x64 の `pasta_check.exe`＋その依存の `THIRD_PARTY_LICENSES.txt`）・`pasta-skills.zip`（配る pasta のスキル 3 つ＋`LICENSE`。作る前に `gen-skill-refs.mjs --check` で生成ファイルの鮮度を照合し、作った後に中身を検査する）の 5 つを作り、artifact `release-assets` で後続 job に渡す。github-release が、前のリリースタグからのコミットの件名から詳しいリリースノート `release-notes-vX.Y.Z.md`（接頭辞を外し、内部の作業を除く）を作り、GitHub Release（題名 `pasta vX.Y.Z`・本文は見どころのファイル `doc/release-notes/vX.Y.Z.md` に、詳しいリリースノートへのリンクと件数の行を足したもの）を作って、5 つの配布物と詳しいリリースノートの 6 つを添付する。見どころの書き方と内部の作業の決まりは `doc/release-notes/README.md`
   - **認証は OIDC**: crates.io は Trusted Publishing、Marketplace は Azure のマネージド ID（フェデレーション資格情報）。長期のトークン（crates.io の API トークン・Marketplace の PAT）は使わず、開発機（`CARGO_REGISTRY_TOKEN`・`VSCE_PAT`）にも GitHub の secret にも置かない。crates.io の短命トークンは job の中で auth の直後に発行し、直後の publish step だけに渡す。crates.io・Marketplace の公開 job（publish-crates・publish-vsce）は environment `release` で走る
   - 公開先ごとに「公開済みなら飛ばす」冪等な処理で、失敗した job の再実行で続きから回復する。job の補助スクリプトは `.github/scripts/release/*.ps1`（pwsh 7）
   - 一回限りのセットアップ手順は `.github/release-ci-setup.md`、その確認は `.github/workflows/release-setup-check.yml`（手動起動・公開しない）。人が読むリリース手順書は `crates/pasta_sample_ghost/RELEASE.md`。エージェントが実行する手順（版の決定 → 版の更新の PR → リリースタグの push → リリース CI の結果の確認）は `release` スキル（`/release [X.Y.Z]`）にあり、手順を直すときはスキルを直す
@@ -251,6 +254,7 @@ cargo test -p pasta_lua     # pasta_luaテスト
 | `@pasta_sakura_script` | さくらスクリプト変換                    |                            |
 | `@enc`                 | UTF-8⇔ANSI変換                          |                            |
 | `@pasta_log`           | ロギング（trace/debug/info/warn/error） |                            |
+| `@pasta_debug`         | デバッグの有効と、位置からのシーンの引き当て（内部。`OnPastaScene`・`OnPastaSceneAt` の既定ハンドラーが使う） | 本番の入口だけが登録 |
 | `@env`                 | 環境変数アクセス                        | **無効**（セキュリティ上） |
 
 ### シーン関数定型パターン

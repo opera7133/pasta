@@ -30,6 +30,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │   │   │   └── word_table_test.rs # 単語テーブルテスト
 │   │   └── src/
 │   │       ├── lib.rs       # クレートエントリーポイント
+│   │       ├── actor_font.rs # ActorFont - アクターごとの表示の装い（pasta.toml の [actor."名前"].font）からタグ列を作る
 │   │       ├── error.rs     # SceneTableError, WordTableError
 │   │       └── registry/    # 型管理レイヤー（独立）
 │   │           ├── mod.rs   # Registry API
@@ -80,7 +81,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       │   ├── loader/      # スクリプトローダー（ディレクトリモジュール）
 │       │   │   ├── mod.rs           # ローダーAPI
 │       │   │   ├── cache.rs         # キャッシュ管理
-│       │   │   ├── config/          # ローダー設定（mod.rs・sections.rs。pasta.toml の [scene.alias] の読み込みを含む）
+│       │   │   ├── config/          # ローダー設定（mod.rs・sections.rs・actor_font.rs。pasta.toml の [scene.alias]・[actor."名前"].font の読み込みを含む）
 │       │   │   ├── context.rs       # ローダーコンテキスト
 │       │   │   ├── discovery.rs     # スクリプト検出
 │       │   │   ├── extract.rs       # 起動時自己展開（内蔵zip解凍・MD5マーカー比較・準アトミック展開）
@@ -95,6 +96,10 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       │   │   ├── persistence.rs      # 永続化
 │       │   │   ├── finalize.rs         # ファイナライズ処理
 │       │   │   ├── renderer_injection.rs # さくらレンダラのアダプタ注入シーム（既定=SHIORIさくら・バイト不変）
+│       │   │   ├── ffi_load/           # ffi.load の置き換え（Windows のときだけ）
+│       │   │   │   ├── mod.rs          # 設置・Lua のラッパ・理由の文言
+│       │   │   │   ├── resolve.rs      # 名前を読むパスへ解く純粋な規則
+│       │   │   │   └── win32.rs        # unsafe の層（DLL の先読み・同名の確かめ・解放）
 │       │   │   └── log.rs              # ランタイムログ
 │       │   ├── sakura_script/ # さくらスクリプト処理
 │       │   │   ├── mod.rs           # さくらスクリプトAPI
@@ -130,13 +135,15 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │           │   ├── startup_test.rs
 │           │   ├── config_actors_initialization_test.rs
 │           │   └── lua_passthrough_test.rs
-│           ├── shiori/              # SHIORI関連テスト（5 files）
+│           ├── shiori/              # SHIORI関連テスト（7 files）
 │           │   ├── main.rs
 │           │   ├── event_dispatch_test.rs
 │           │   ├── event_handler_test.rs
+│           │   ├── mouse_event_test.rs
 │           │   ├── res_test.rs
-│           │   ├── virtual_event_config_test.rs
-│           │   └── virtual_event_dispatch_test.rs
+│           │   ├── virtual_event_config_resolution_test.rs
+│           │   ├── virtual_event_dispatch_test.rs
+│           │   └── virtual_event_status_skip_test.rs
 │           ├── runtime/             # ランタイム関連テスト（8 files）
 │           │   ├── main.rs
 │           │   ├── finalize_scene_test.rs
@@ -152,14 +159,27 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │           │   ├── integration_test.rs
 │           │   ├── module_test.rs
 │           │   └── stack_level_test.rs
-│           ├── sakura_script/       # SakuraScript関連テスト（2 files）
+│           ├── sakura_script/       # SakuraScript関連テスト（7 files）
 │           │   ├── main.rs
+│           │   ├── backslash_break_test.rs
 │           │   ├── basic_test.rs
+│           │   ├── budoux_test.rs
+│           │   ├── conformance_test.rs
+│           │   ├── edge_case_test.rs
+│           │   ├── grapheme_test.rs  # 書記素クラスタ単位のウェイト・改行・幅
 │           │   └── output_test.rs
 │           ├── search/              # 検索関連テスト（2 files）
 │           │   ├── main.rs
 │           │   ├── scene_search_test.rs
 │           │   └── module_test.rs
+│           ├── ffi/                 # ffi.load の置き換えのテスト（テスト中に cc で DLL をビルド）
+│           │   ├── main.rs
+│           │   ├── dll_fixture.rs   # テスト用 DLL のビルド
+│           │   ├── load_test.rs
+│           │   ├── config_test.rs
+│           │   ├── collision_test.rs
+│           │   ├── lifetime_test.rs
+│           │   └── compare_test.rs
 │           ├── common/              # テスト共通ユーティリティ
 │           │   ├── mod.rs
 │           │   └── e2e_helpers.rs
@@ -203,7 +223,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │       ├── README.md        # クレート概要
 │       ├── RELEASE.md       # リリース手順
 │       ├── STAGES.md        # 入門ガイドの段階表（段階 N の辞書 = dic/01〜NN。.nar には入らない）
-│       ├── release.ps1      # ビルド＋配布パッケージ生成スクリプト（6 段。絵を生成する段は無い。手元では動作確認用・リリース CI の build job も呼ぶ）
+│       ├── release.ps1      # ビルド＋配布パッケージ生成スクリプト（8 段。段 3 で x64 の pasta_check.zip を作り、段 4 でその exe の release を走らせ、段 6 で pasta-skills.zip を作る。絵を生成する段は無い。手元では動作確認用・リリース CI の build job も呼ぶ）
 │       ├── art/             # 立ち絵の生成の記録（README.md）と設定画像 2 枚（.nar には入らない）
 │       ├── src/
 │       │   ├── lib.rs              # テスト用モジュールの宣言だけ
@@ -257,7 +277,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 │   ├── scripts/release/     # リリース CI の job 補助スクリプト（verify-tag/publish-crate/publish-vsix/release-notes/github-release の .ps1）と、その検査 release-scripts-test.ps1（build.yml の release-scripts job で実行）
 │   └── release-ci-setup.md  # リリース CI の一回限りのセットアップ手順書
 ├── release.bat              # crates/pasta_sample_ghost/release.ps1 のバッチラッパー（ダブルクリック用）
-├── release/                 # release.ps1 の出力先（.nar・pasta.dll.zip。.gitignore 済み・コミットしない）
+├── release/                 # release.ps1 の出力先（pasta_check.zip・.nar・pasta.dll.zip・pasta-skills.zip。.gitignore 済み・コミットしない）
 ├── Cargo.lock               # 依存の解決結果（コミット対象・リリース CI の build で不変を検査）
 ├── README.md                # プロジェクト概要
 ├── LICENSE                  # ライセンス
@@ -268,7 +288,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 - ルートクレート (`src/`) は削除済み。すべての実装コードは `crates/*/src/` 配下に配置。
 - ルートレベルの `tests/` と `examples/` も削除済み（Pure Virtual Workspace移行完了）
 - 各クレートは独自の `tests/` ディレクトリを持つことができる（例: pasta_dsl, pasta_core, pasta_lua, pasta_lsp, pasta_sample_ghost, pasta_shiori）
-- pasta_sample_ghost のサンプルゴースト hello-pasta は `ghosts/hello-pasta/` に完全な一式として直接配置（SSOT）。テキスト系（descript/pasta.toml/dic/install）は手書き正本、画像・DLL は生成物。`release.ps1` は生成物の配置と `.nar`・`pasta.dll.zip` のパッケージングを担う（旧 dist-src/robocopy 方式は廃止）。生成物のうち DLL・ライセンス表示・`scripts/` と `release/` はコミットしない。配布物の公開はリリースタグの push で `release.yml` が行う
+- pasta_sample_ghost のサンプルゴースト hello-pasta は `ghosts/hello-pasta/` に完全な一式として直接配置（SSOT）。テキスト系（descript/pasta.toml/dic/install）とシェルの画像は追跡する正本、DLL・ライセンス表示・`scripts/` は生成物。`release.ps1` は生成物の配置と `pasta_check.zip`・`.nar`・`pasta.dll.zip`・`pasta-skills.zip` のパッケージングを担う（旧 dist-src/robocopy 方式は廃止）。生成物のうち DLL・ライセンス表示・`scripts/` と `release/` はコミットしない。配布物の公開はリリースタグの push で `release.yml` が行う
 - `CLAUDE.md` が AI 開発支援の指示（プロジェクト指示・Kiro 仕様駆動ワークフロー・コマンド一覧）を担う
 
 ## ファイル命名規則
@@ -315,7 +335,7 @@ pasta/                        # Cargo ワークスペースルート（Pure Virt
 
 ### ファイルサイズ方針（俯瞰可能性）
 
-- **目安上限 600 行**: Rust ソース・テストファイルは 1 ファイルあたり概ね 600 行未満を保つ（`oversized-file-decomposition` で全ファイルを俯瞰可能サイズへ振る舞い不変分解した。2026-10-17 の時点で、`pasta_check` の `balloon.rs`（1,070 行）だけが超えている）。
+- **目安上限 600 行**: Rust ソース・テストファイルは 1 ファイルあたり概ね 600 行未満を保つ（`oversized-file-decomposition` で全ファイルを俯瞰可能サイズへ振る舞い不変分解した。2026-10-18 の時点で、1,000 行を超えるのは `pasta_lua` の `sakura_script/line_breaker.rs`（1,155 行。本体は約 310 行で、残りはテスト）と `pasta_check` の `balloon.rs`（1,070 行。後半はテスト）の 2 つ。600 行を超えるファイルは 30 近くある）。
 - **分解の方向**: 肥大化したファイルは、フラットな単一ファイル → 同名のディレクトリモジュール（`mod.rs` + 責務別サブモジュール）へ展開する。例: `debug/dap.rs` → `debug/dap/{mod,codec,decode,encode,pending,resolver}.rs`。
 - **不変条件**: 分解はあくまで振る舞い不変（pub API・テスト結果を変えない）。新規実装でこの上限のために責務をまたぐ分割をしない。
 
@@ -368,6 +388,7 @@ pasta_dsl（パーサー） + pasta_core（レジストリ）
 
 ### 公開API (`pasta_core/lib.rs`)
 - **Registry**: `SceneRegistry`, `WordDefRegistry`, `SceneTable`, `WordTable`
+- **ActorFont**: `ActorFont`, `FontInput`, `FontValue`, `FONT_ATTRIBUTES`（アクターごとの表示の装い）
 - **Random**: `RandomSelector`, `DefaultRandomSelector`
 - **Error**: `SceneTableError`, `WordTableError`
 
@@ -383,6 +404,7 @@ pasta_dsl（パーサー） + pasta_core（レジストリ）
 | Loader       | スクリプト読み込み  | `loader_integration_test.rs`     |
 | Registry     | 型管理、独立性      | `scene_search_test.rs`           |
 | Control Flow | Call、最適化        | `transpiler_snapshot_test.rs`    |
+| SakuraScript | 書記素クラスタ単位のウェイト・改行 | `sakura_script/grapheme_test.rs` |
 
 ### テストファイル配置
 - `crates/<crate>/tests/<feature>_test.rs`: 統合テスト

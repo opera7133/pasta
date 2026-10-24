@@ -28,10 +28,12 @@ local STORE = require("pasta.store")
 | `local_words` | `table<string, table>` | グローバルシーン名 → { 単語キー → 値リストの配列 } | `pasta.word` の `create_local` のビルダー |
 | `actor_words` | `table<string, table>` | アクター名 → { 単語キー → 値リストの配列 } | `pasta.word` の `create_actor` のビルダー |
 | `app_ctx` | `table` | セッション中の汎用の表 | ACT の生成時に同じ表が `act.app_ctx` に入る |
-| `co_scene` | `thread\|nil` | 中断中の継続待ちのコルーチン | `pasta.shiori.event` の `set_co_scene`（[継続トーク（チェイントーク）と co_scene の更新](https://ekicyou.github.io/pasta/internals/execution-model.html#継続トークチェイントークと-co_scene-の更新)） |
+| `co_scene` | `thread\|nil` | 中断中の継続待ちのコルーチン。台詞を出さない割り込みでは残り、台詞を出した割り込み・指名した再生・エラーで捨てられる | ランタイムの中では `pasta.shiori.event` の `set_co_scene` だけが書き、`EVENT.drive` が種類と台詞の印で呼ぶ。`STORE.reset` も `nil` に戻す（[継続トーク（チェイントーク）と co_scene の更新](https://ekicyou.github.io/pasta/internals/execution-model.html#継続トークチェイントークと-co_scene-の更新)） |
+| `co_preempt` | `table<thread, true>` | 開発者が指名した再生（キック・シーン再生）のコルーチンの印（はっきり捨てる）。キーを弱い参照にした表で、捨てたコルーチンは GC で消える | `pasta.shiori.event.kick` の `wrap_local_func`・`wrap_reload_func` と、`pasta.shiori.event.scene_play` の `OnPastaScene`・`OnPastaSceneAt` が付ける。読むのは `pasta.shiori.event` の `drive_kind` だけ。`STORE.reset` が作り直す |
 | `last_global_scene` | `string\|nil` | 最後に `init_scene` したシーンテーブルの `__global_name__` | `ACT_IMPL.init_scene` だけが書く（Call から戻っても戻さない）。OnChoiceSelectEx の既定ハンドラが、Reference2 から選択肢を出したグローバルシーンが得られないときの、選択 ID の検索の親に使う |
 | `kick_pending` | `string\|nil` | 保留中のキック対象のシーン名 | `KICK.install` が書き、`KICK.try_dispatch` が消費する（[キックの保留と起動](https://ekicyou.github.io/pasta/internals/debug.html#キックの保留と起動kicklua)） |
 | `kick_force` | `boolean` | キックの割り込み許可（既定 `false`） | `KICK.install` が立て、仮想イベントの `dispatch` の入口が 1 回で下ろす |
+| `auto_talk_paused` | `boolean` | 自動トークを止めている印（既定 `false`）。回数は数えず、永続化しない | `GLOBAL.pause_auto_talk` が立て、`GLOBAL.resume_auto_talk` と `STORE.reset` が下ろす。仮想イベントの `dispatch`・`ACT_IMPL.yield`・つつき撫での既定ハンドラが読む（[自動トークを止めている間](shiori-events.md#自動トークを止めている間)） |
 | `co_callback` | `thread\|nil` | コールバック待ちとして登録したコルーチンの印 | `pasta.store` は初期化しない（未設定のときは `nil`）。`CALLBACK.consume_staged` が書き、直後の `set_co_scene`（どちらも `EVENT.drive` の中）が `nil` に戻す。`CALLBACK.reset` も `nil` に戻す（[コールバック待ちとの関係](https://ekicyou.github.io/pasta/internals/execution-model.html#コールバック待ちとの関係)） |
 
 単語の 3 つのフィールドの値の形は [finalize_scene](#finalize_scene) の「単語収集データ構造」で扱う。
@@ -54,7 +56,7 @@ STORE.reset()
 ```
 
 - `co_scene` は、`coroutine.close` があり中断中なら閉じてから `nil` にする。LuaJIT 2.1 には `coroutine.close` が無いため、ランタイムでは閉じる処理は実行されず、参照を外すだけになる（[LuaJIT 2.1 の制約](https://ekicyou.github.io/pasta/internals/execution-model.html#luajit-21-の制約)）。
-- `actors`・`actor_spots`・`scenes`・`app_ctx`・`counters`・`global_words`・`local_words`・`actor_words`・`appearance` を新しい空の表（`appearance` は空の 4 つの表を持つ表）にし、`last_global_scene`・`kick_pending` を `nil`、`kick_force` を `false` にする。
+- `actors`・`actor_spots`・`scenes`・`app_ctx`・`counters`・`global_words`・`local_words`・`actor_words`・`appearance` を新しい空の表（`appearance` は空の 4 つの表を持つ表）にし、`last_global_scene`・`kick_pending` を `nil`、`kick_force`・`auto_talk_paused` を `false` にし、`co_preempt` をキーを弱い参照にした新しい表にする。仮想イベントの時計は決め直さない。
 - `@pasta_config` からの初期化はやり直さない。`actors`・`actor_spots` は空の表になる。
 - `co_callback` は変えない。コールバックの状態を消すのは `CALLBACK.reset()` である。
 - フィールドの表を新しい表に置き換えるため、すでに作られた ACT が持つ `act.app_ctx`・`act.actors` は古い表を指したまま残る。
@@ -333,7 +335,8 @@ STORE.scenes = {
 | `get_all_scenes()` | `STORE.scenes` そのもの（複製しない）を返す |
 | `search(name, global_scene_name, attrs)` | 前方一致の検索でシーンを探し、結果オブジェクトを返す（後述） |
 | `co_exec(act, name, global_scene_name, attrs)` | `act:find_scene` で探したシーン関数をコルーチンに包んで返す（後述） |
-| `co_exec_exact(name)` | 完全一致の検索で探したグローバルシーンをコルーチンに包んで返す（後述） |
+| `co_exec_exact(name, local_name)` | 完全一致の検索で探したグローバルシーンかローカルシーンをコルーチンに包んで返す（後述） |
+| `co_exec_registered(global_name, local_name)` | 登録名の組で引いたシーン関数をコルーチンに包んで返す（後述） |
 
 - 生成コードは `create_scene` を基本名だけで呼び（`local SCENE = PASTA.create_scene("メイン")`）、返ったシーンテーブルに `function SCENE.__start__(act, ...)` の形で関数を直接定義する。`register`・`create_global_table` などは `pasta.scene` の内部とテストが使う。
 - 番号は基本名ごとに全モジュールを通して振られる。`pasta.scene_dic` がモジュールを名前順に `require` するため、同じ基本名のシーンの番号はその順（モジュールの中では出現順）で決まる。
@@ -363,7 +366,18 @@ STORE.scenes = {
 
 ### co_exec_exact
 
-`SCENE.co_exec_exact(name)` は、`@pasta_search` の `SEARCH:search_scene_exact(name, nil)` でグローバルシーンを完全一致で探し（[search_scene_exact](pasta-search.md#search_scene_exactname-global_scene_name)）、見つかった `(グローバルシーン名, ローカル名)` で `SCENE.get` を引く。見つからないか関数が無ければ `nil` を、関数なら `co_exec` と同じ包み方のコルーチンを返す。`act` を取らず、`act:find_scene` の名前の解決（act のメソッド・`GLOBAL` テーブルなど）を通らない。つつき・撫での既定ハンドラ（`pasta.shiori.event.mouse`）が、ショートカットの 1〜8 段の名前を探すのに使う（[つつき・撫でのショートカット](shiori-events.md#つつき撫でのショートカット)）。
+`SCENE.co_exec_exact(name, local_name)` は、完全一致の検索でシーンを探し、`co_exec_registered` でコルーチンにして返す。`act` を取らず、`act:find_scene` の名前の解決（act のメソッド・`GLOBAL` テーブルなど）を通らない。
+
+- `local_name` が `nil` のとき: `@pasta_search` の `SEARCH:search_scene_exact(name, nil)` でグローバルシーンを探す（[search_scene_exact](pasta-search.md#search_scene_exactname-global_scene_name)）。
+- `local_name` を渡したとき: `SEARCH:search_local_scene_exact(name, local_name)` で、`name` のグローバルシーンの中の `local_name` のローカルシーンを探す（[search_local_scene_exact](pasta-search.md#search_local_scene_exactglobal_name-local_name)）。2 つの引数はどちらも作者が書く名前である。
+
+戻り値は、見つかればコルーチン 1 つである。見つからないか、引いた値が関数でなければ、`nil` と見つからなかった側（`"global"` か `"local"`）の 2 値を返す。`local_name` が `nil` のときは常に `"global"` である。`local_name` を渡したときは、グローバルシーンが無ければ `"global"`、グローバルシーンはあるがローカルシーンが無いか関数でなければ `"local"` である。
+
+つつき・撫での既定ハンドラ（`pasta.shiori.event.mouse`）は、`local_name` を渡さずにショートカットの 1〜8 段の名前を探す（[つつき・撫でのショートカット](shiori-events.md#つつき撫でのショートカット)）。`OnPastaScene` の既定ハンドラ（`pasta.shiori.event.scene_play`）は、Reference0 と Reference1（空の文字列なら `nil`）を渡し、戻り値の 2 つ目で失敗の表記を選ぶ（[OnPastaScene](shiori-events.md#onpastascene名前でシーンを再生)）。
+
+### co_exec_registered
+
+`SCENE.co_exec_registered(global_name, local_name)` は、登録名の組で `SCENE.get(global_name, local_name)` を引き、関数なら `co_exec` と同じ包み方のコルーチンを返す。関数でなければ `nil` を返す。検索をしないため、シャッフル＆順次消費の記録は進まない。`local_name` に `"__start__"` を渡すと、グローバルシーンの本体を引く。`co_exec_exact` は、検索で得た登録名の組をこの関数に渡す。`OnPastaSceneAt` の既定ハンドラは、位置から引いた登録名の組を渡す（[OnPastaSceneAt](shiori-events.md#onpastasceneat位置でシーンを再生)）。
 
 ### DSL の Lua ブロックとの接続
 

@@ -207,3 +207,58 @@ roadmap のバックログにあった「`pasta_core` の `resolve_scene_id` の
 - `pasta_check validate` の飛び先の検査は、辞書の中身が分からないとき（構文エラー・読めない辞書ファイル・pasta.toml の誤り）に丸ごと省く形になった。判定は `crates/pasta_check/src/validate/report.rs` の `skip_reasons`（統計の `skipReasons`）で、すべての段の報告がそろった後に 1 回だけ行う（`validate/mod.rs`）。
 - 見直しが要る論点: この spec が `validate` に辞書のシーンの集まりに頼る検査を足すなら、`skip_reasons` が空のときだけ走らせるか。辞書の中身が分からないことを表す誤りの種類を足すなら、`skip_reasons` の対応に入れるか。
 - 参照: `.kiro/specs/completed/pasta-check-validate-edges/design.md` の「Revalidation Triggers」と「Report（report.rs）」の省く理由の表。
+
+## 2026-10-18 棚卸の再測定（main facd6cf4）
+
+- **前提の変化**: 前回（main b4164100）から入った 4 本のうち、この spec の持ち場に触ったのは `pasta-check-validate-edges` だけ。辞書の検査の段の順（`crates/pasta_check/src/validate/mod.rs` 67〜103 行）で、飛び先の検査 `references::check` は省く理由（`skip_reasons`）が空のときだけ走る（86〜92 行）。報告の種類は `actor-display-style` の `ConfigActorFont` が増えて 25 種（`report.rs` 56 行の `FindingKind::ALL`）。VSCode 拡張の `wasmBridge.ts` は報告の code を文字列のまま受けるので、種類を足しても TS は直さなくてよい（省く理由を足すときだけ、`wasmBridge.ts` 50 行の `SKIP_REASONS` も直す）。
+- **変わっていないもの**: Call の文法・生成・`act.lua`・`scene.lua`・`search/`・`pasta_core` の登録表・LSP（`visit_action.rs`）・VSCode の文法定義。2026-10-17 の節の行番号はそのまま合う（Call の Lua を出す `generate_call_scene` は `element_gen.rs` 212 行）。
+- **触るファイル**: 2026-10-17 の節と同じ。候補が複数残る場面の検査を足すなら、`validate/references.rs`（135。Call の腕は 32〜56 行）・`report.rs`（475。前回の 379 から増えた）、一致テスト `crates/pasta_check/tests/validate_parity_test.rs`、マニュアル `book/src/debug/validate.md` の報告の表（163〜164 行の並び）。検査は `pasta_core` の `SceneTable` で飛び先を探す（`references.rs` 5 行）ので、絞り込みの形を変えると検査の側もそろえる。1,000 行に近いのは `act.lua`（829）だけ。新しいファイルは無い見込み。
+- **規模**: 19〜21 のまま。2026-10-04 に一度分けた spec なので、20 をわずかに超えても分けない。
+- **先に要るもの**: `scene-attribute-store`（属性の保持と値の型）。ファイルの重なり: `scene-attribute-store`（文法・`partial.rs`・`element_gen.rs`・`act.lua`・`scene.lua`・`search/context.rs`・`scene_table.rs`・`scene_types.rs`）、`scene-anchor-link`（文法・`parse_action.rs`・構文木・`partial.rs`・`element_gen.rs`・`act.lua`・VSCode の文法定義・`visit_action.rs`・`validate/references.rs`・`report.rs`）、`cue-command-runtime`（文法・`act.lua`・検査の段）、`novel-talk-flow`（`act.lua`・`scene.lua`・`search/context.rs`・`scene_table.rs`・検査の段）、`novel-checkpoint-rollback`（`act.lua`・`scene_table.rs` ほか）、`novel-variable-scope`（文法・`element_gen.rs`・`act.lua`・VSCode の文法定義）、`shell-element-click`（あちらが `scene.lua` に口を足す場合だけ）。`pasta-check-validate-edges` は完了したので、検査の段の重なりは消えた。
+- **種別**: 機能（`＞シーン＆k＝v` は今は構文エラー）。0.5.0 のフラグによる分岐の本命（開発者の決定）。
+- **要件定義のモデル**: Fable のまま。後から戻しにくい決定は、Call の絞り込みの書き方と意味（新しい文法で、見本のノベルと作者の辞書が上に乗る）。推奨の無い論点が 3 つ以上絡んで残る（比べる記号と数のしきい値の向き、条件のつなぎ方、「それ以外」の場面と候補が無いときの動きと候補の控えのキー、条件の値に変数を書く形と連結の `＆` との見分け）。今回の変化は、このどれにも触れていない。
+- **分割の案**: 分けない。
+- **見つけた穴・古くなった記述**:
+  - 2026-10-17 の節の重なりの `pasta-check-validate-edges`（`validate/mod.rs`）は、完了したので外す。`shell-element-click`（`act.lua`）は誤りで、あちらは `act.lua` を触る予定が無い。
+  - 候補が複数残る場面の検査は、`references.rs` の Call の腕に置くのが素直で、そうすれば省く理由があるときは走らない（申し送り（pasta-check-validate-edges より）の論点は「空のときだけ走らせる」を推奨にできる）。種類を足すと `FindingKind::ALL` の数も変わる。
+  - 「申し送り（pasta-check-validate-edges より）」の 5 行と見出しの前の空行は改行が LF だった。今回 CRLF にそろえた。
+  - roadmap 191 行の「辞書の検査に検査を足す spec は `pasta-check-validate-edges` と同じウェーブに置かない」は、完了したので古い（即時修正の候補）。
+
+## 申し送り（2026-10-21 の discovery「PastaDSL機能ヒアリング」より）
+
+ghost_dev の「emo2 開発」「ぱすた開発」セッションに、Lua で組んでいるが DSL で書きたいものを聞いた。いちばん数が多かったのは、**イベントの Reference や保存の変数で振り分けて、合わなければ何も返さない（204）**シーンである。今は「`＊イベント` → `＞lua関数` → `act:call(SCENE.__global_name__, …)`」の 3 段で書き、分岐の中身が 1〜3 行なのに定型が 5〜10 行ある。要件の材料にする実例は次のとおり。
+
+- **2 つの値の等しさ**: `OnShellChanging` は Reference0＝Reference1（同じシェルを選び直した）なら 204、違えば「着替え開始」（emo2 `system.pasta`）。比べる相手が両方とも変数になる。
+- **値との等しさ・空**: `OnUpdateComplete` は Reference0＝`changed` なら「更新成功」、それ以外は「更新無し」（emo2 `update.pasta`）。`OnGhostChanging`／`OnGhostChanged` は Reference0 が空か自分の名前なら 204（emo2 `boot.pasta`・`boot.lua`）。`OnBoot` は Reference6＝`halt` かつ Reference7 が空でないなら「起動halt」。
+- **値の前方一致**: `OnInstallComplete` は Reference0 が `ghost`／`shell`／`balloon` で始まるかで 4 つに分ける（`ghost with balloon` のような複合形があるため）。動的 Call の前方一致は「呼ぶ名前がシーン名の頭」の向きなので、「値がシーン名で始まる」の逆向きには使えない。
+- **複数の条件（かつ）**: 窓際のぱすたさんの `OnMouseClick` は、Reference3＝0・Reference5＝0・Reference4＝`セキュリティボール` で、さらに `＄＊初回待ち` が立っていれば「初回の続き」、立っていなければ「ボール巡回」（`window.pasta`）。`OnMouseEnter`／`OnMouseLeave` は Reference4＝`閉じる` かつ Reference3＝0 で、Status に `talking` を含まないときだけ動く。
+- **数の範囲**: 起動の挨拶を時刻で振り分ける（emo2 は 4 帯、窓際のぱすたさんは 5 帯。`＄時` の範囲）。
+- **一度だけ**: `＊ギャル抽選` は `＄＊ギャル初対面済み` が立っていなければ「ギャル出会い」を出してフラグを立て、立っていれば `＞ギャル_`（窓際のぱすたさん `talk_gal.pasta`）。
+- **候補が無いとき**: 両ゴーストとも「条件に合う候補だけで抽選し、どれも合わなければ 204」を望んだ。中身の無いシーンは今も 204 になる（`act:build()` が nil。`book/src/lua/shiori-events.md` L47-48・L630）ので、「候補なし」を何も出さない扱いにすれば、204 を返す専用の書き方は要らない。
+- **作者が想像した書き方**（文法は想像）: 呼ぶ側の `？＄ｒ０＝＝「changed」　＞更新成功`、受ける側の `＊OnMouseClick　＆r4：セキュリティボール　＆＄＊初回待ち`、前方一致の `＆r0^：shell`。両方向（呼ぶ側で絞る・場面の側に条件を書く）の要望がある。2026-10-10 の決定（分岐は Call の絞り込みで書く）のどちらの向きで受けるかを、要件で決める。
+- **Reference の読み方**: 条件に Reference を使うには、今は先に `＞transfer_req_to_var` が要る（自動では入らない。`book/src/grammar/variables.md` L345・L379）。イベントのシーンで自動で転記する件は roadmap の Direct Implementation Candidates に置いた。こちらの要件で Reference を直接書ける形にするなら、そちらは要らなくなる。
+- 今の DSL だけで書ける分（`OnInstallRefuse` の転記だけ、季節の動的 Call）は、両セッションへ書き方を伝えた。
+
+## 2026-10-23 棚卸の再測定（main 8fc9bdff）
+
+- **前提の変化**: `scene-play-event` が、シーンを探す道を 1 本足した。Call の道（`act:call` → `find_handler` → `SCENE.search` → `search_scene`）は変わっていない。
+  - シーン表 `crates/pasta_core/src/registry/scene_table.rs` に `resolve_global_owning_local_exact`（297 行）が増えた。指名したローカルシーンを持つグローバルシーンだけを候補にする。絞り込み条件 `filters` を受ける関数は、これで 4 つになった（`resolve_scene_id`・`resolve_scene_id_unified`・`resolve_scene_id_exact` と、この関数）。条件の形を変えるなら、これとその試験（`scene_table_resolve_filter_tests.rs` に 3 本増えて 497 行）も合わせる。
+  - 候補の控えのキー `SceneCacheKey` に「持ち主のローカル名」の欄が増えた（25〜26 行）。条件をキーに含める作り直しでは、この欄を残す。
+  - 検索の入口 `crates/pasta_lua/src/search/context.rs` に、グローバルとローカルの名前の組で完全一致に探す `search_local_scene_exact`（204 行）が増え、ここも空の条件で探す（215 行）。Lua 側は `SCENE.co_exec_exact(名前, ローカル名)`（`scene.lua` 230 行）で、外から指名したシーンを再生するイベント（`OnPastaScene`）と撫で・つつきの近道が使う。`attrs` を受けない。要件で「指名の再生は絞り込まない」と書いておくのを推奨する。
+  - `ontalk-suppression` が、区切りの関数 `ACT_IMPL.yield`（`act.lua` 664 行）の頭に、自動トークを止めている間の見張りを足した。Call の道には触れていない。
+- **触るファイル**: 2026-10-17 の節と同じ。行数は `act.lua` 837（1,000 行に近い）、`scene.lua` 266、`search/context.rs` 1,017（本体は 437 行まで、残りは中のテスト。試験を足すなら別のファイルに置く）、`scene_table.rs` 539、`scene_table_resolve_filter_tests.rs` 497。文法・Call の Lua を出すコード生成・構文木・編集中の解析・エディタの着色・VSCode の文法定義・辞書の検査は変わっていない。
+- **規模**: 19〜21 のまま（増えた関数 1 つを合わせる分は小さい）。2026-10-04 に一度分けた spec なので、分けない。
+- **先に要るもの**: `scene-attribute-store`。ファイルの重なり（前回のものに足す）:
+  - `scene-exact-match`（Call の文法 `call_scene`、Call の Lua を出す `element_gen.rs`、`act.lua` の 5 段の探し方 `find_act_handler` と `search_dictionary`、`scene.lua` の `SCENE.search`、`search/context.rs` の `search_scene_by`、エディタの着色、VSCode の文法定義）。どちらも `act:call` の 3 つ目の引数のあたりを使いたくなるので、先に入る側が受け渡しの形を決める。`scene-exact-match` が先なら、`attrs` を条件のために空けておく約束にする。
+  - `chain-talk-interrupt`（`act.lua` の `ACT_IMPL.build` のあたり。同じファイルなので同じウェーブに置かない）。
+  - 隙間の spec: `ponytail-dsl-parser`（文法）、`ponytail-lua-transpiler`（`element_gen.rs`）、`ponytail-core-registry`（`scene_table.rs`・`search/context.rs`・`pasta_core` の README）、`ponytail-editor-tooling`（`visit_action.rs`・文法定義・`partial.rs`）、`ponytail-lua-scripts`（`act.lua`・`scene.lua`）。
+- **種別**: 機能（`＞シーン＆k＝v` は今は構文エラー）。0.5.0 のフラグによる分岐の本命（開発者の決定）。
+- **要件定義のモデル**: Fable のまま。新しい書き方と意味（見本のノベルと作者の辞書が上に乗る）で、推奨の無い論点が 3 つ以上絡む（比べる記号としきい値の向き、条件のつなぎ方、「それ以外」の場面と候補が無いときの動き、条件の値に変数を書く形と連結の `＆` との見分け）。今回の変化は、このどれにも触れていない。
+- **分割の案**: 分けない。
+- **見つけた穴・古くなった記述**:
+  - 2026-10-17 の節の行番号: `act.lua` 829 → 837（`find_scene` 680 → 688、`call` 695 → 703、その中の `find_handler("scene", key)` 709 → 717。`search_dictionary` の `SCENE.search` 336 は同じ）。`search/context.rs` 788 → 1,017（`search_scene` 91 → 105、`search_scene_exact` 105 → 119、`search_scene_by` 115〜121 → 129〜135）。`scene_table.rs` 483 → 539（`resolve_scene_id` 179 → 183、`resolve_scene_id_unified` 226 → 230、`resolve_scene_id_exact` 251 → 255、`filter_by_attributes` 287 → 343、`find_scene` 453 → 509）。`scene.lua` の 150・160・208 行は同じ。
+
+## 申し送り（external-control-events より、2026-10-23）
+
+- `FAILURE.LABEL` に `NOT_JSON = "JSON として読めない値"`・`NOT_ASSIGNABLE = "代入できない値"` が入り、12 種になった（上の「10 種」は古い）。種類を足すときは `failure_test.lua` の数のテストも合わせて直す。
+- 既定のハンドラの読み込みの並び（`pasta/shiori/event/init.lua`）の末尾に、`scene_play` の次の 1 行として `external_control` が入った。読み込みの行を足すときはその後ろになる。
